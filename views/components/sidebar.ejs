@@ -1,0 +1,169 @@
+<%
+  function isChildActive(children, currentPath) {
+    return Array.isArray(children) && children.some((child) => child && child.href === currentPath);
+  }
+
+  function getModuleKey(href) {
+    if (href === "/Installment/Index/" || href === "/Installment/Create" || href === "/Installment/Edit") return "installment";
+    if (href === "/Shop/Index/" || href === "/Shop/Create" || href === "/Shop/Edit") return "shop";
+    if (href === "/Staff/Index/" || href === "/Staff/Create" || href === "/Staff/Edit") return "staff";
+    if (href === "/Staff/PermissionStaff/") return "permission";
+    if (href === "/History/") return "history";
+    if (href === "/Trash/Index/") return "trash";
+    return "default";
+  }
+
+  function localizeLabel(label, href) {
+    const map = {
+      "Tra gop": "Trả góp",
+      "Cua hang": "Cửa hàng",
+      "Nhan vien": "Nhân viên",
+      "Phan quyen": "Phân quyền",
+      "Lich su thao tac": "Lịch sử thao tác",
+      "Thung rac": "Thùng rác",
+      "Danh sach": "Danh sách",
+      "Them moi": "Thêm mới"
+    };
+
+    if (label && map[label]) {
+      return map[label];
+    }
+
+    if (href === "/Installment/Index/") return "Trả góp";
+    if (href === "/Shop/Index/") return "Cửa hàng";
+    if (href === "/Staff/Index/") return "Nhân viên";
+    if (href === "/Staff/PermissionStaff/") return "Phân quyền";
+    if (href === "/History/") return "Lịch sử thao tác";
+    if (href === "/Trash/Index/") return "Thùng rác";
+
+    return label || href || "";
+  }
+
+  function renderIconByModule(moduleKey, kind) {
+    const iconClass = kind === "submenu" ? "app-sidebar__submenu-svg" : "app-sidebar__svg";
+
+    if (moduleKey === "installment") {
+      return `<svg class="${iconClass}" viewBox="0 0 24 24" aria-hidden="true">
+        <rect class="app-sidebar__svg-duotone" x="4" y="5" width="16" height="14" rx="3"></rect>
+        <path class="app-sidebar__svg-stroke" d="M8 9h8M8 12h8M8 15h5"></path>
+      </svg>`;
+    }
+
+    if (moduleKey === "shop") {
+      return `<svg class="${iconClass}" viewBox="0 0 24 24" aria-hidden="true">
+        <path class="app-sidebar__svg-duotone" d="M4 11.5 12 5l8 6.5V19a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-7.5Z"></path>
+        <path class="app-sidebar__svg-stroke" d="M4 11.5 12 5l8 6.5M9 21v-5h6v5"></path>
+      </svg>`;
+    }
+
+    if (moduleKey === "staff") {
+      return `<svg class="${iconClass}" viewBox="0 0 24 24" aria-hidden="true">
+        <circle class="app-sidebar__svg-duotone" cx="12" cy="8" r="4"></circle>
+        <path class="app-sidebar__svg-duotone" d="M5 19c0-3.3 3.1-5 7-5s7 1.7 7 5v1H5v-1Z"></path>
+        <path class="app-sidebar__svg-stroke" d="M7 10.5a2.5 2.5 0 1 1 .2-5M17 10.5a2.5 2.5 0 1 0-.2-5"></path>
+      </svg>`;
+    }
+
+    if (moduleKey === "permission") {
+      return `<svg class="${iconClass}" viewBox="0 0 24 24" aria-hidden="true">
+        <path class="app-sidebar__svg-duotone" d="M12 3 6 5.5V11c0 4.2 2.8 8 6 9.2 3.2-1.2 6-5 6-9.2V5.5L12 3Z"></path>
+        <path class="app-sidebar__svg-stroke" d="M10.8 11.7 12 13l2.4-2.8"></path>
+        <circle class="app-sidebar__svg-stroke" cx="12" cy="12" r="3.5"></circle>
+      </svg>`;
+    }
+
+    if (moduleKey === "history") {
+      return `<svg class="${iconClass}" viewBox="0 0 24 24" aria-hidden="true">
+        <circle class="app-sidebar__svg-duotone" cx="12" cy="12" r="8"></circle>
+        <path class="app-sidebar__svg-stroke" d="M12 8v4l2.5 2.5"></path>
+      </svg>`;
+    }
+
+    if (moduleKey === "trash") {
+      return `<svg class="${iconClass}" viewBox="0 0 24 24" aria-hidden="true">
+        <path class="app-sidebar__svg-duotone" d="M7 6h10l-.7 13.3a2 2 0 0 1-2 1.9H9.7a2 2 0 0 1-2-1.9L7 6Z"></path>
+        <path class="app-sidebar__svg-stroke" d="M4.5 6h15M9 6V4.8A1.8 1.8 0 0 1 10.8 3h2.4A1.8 1.8 0 0 1 15 4.8V6M10 10.2v6.4M14 10.2v6.4"></path>
+      </svg>`;
+    }
+
+    return `<svg class="${iconClass}" viewBox="0 0 24 24" aria-hidden="true">
+      <rect class="app-sidebar__svg-duotone" x="5" y="5" width="14" height="14" rx="3"></rect>
+      <path class="app-sidebar__svg-stroke" d="M9 12h6"></path>
+    </svg>`;
+  }
+%>
+<aside class="m-grid__item m-aside-left app-sidebar">
+  <div class="app-brand">
+    <a class="app-brand__link" href="/Installment/Index/" aria-label="2Gold Home">
+      <img class="app-brand__logo" src="/public/assets/logo-2gold.svg" alt="2Gold">
+      <div class="app-brand__meta">
+        <div class="app-brand__name">2Gold</div>
+        <div class="app-brand__tagline">Order Manager</div>
+      </div>
+    </a>
+  </div>
+
+  <div class="m-aside-menu-wrapper">
+    <ul class="m-menu__nav">
+      <% (navItems || []).forEach((item, index) => { %>
+        <% const hasChildren = Array.isArray(item.children) && item.children.length > 0; %>
+        <% const moduleKey = getModuleKey(item.href); %>
+        <% const itemActive = activePath === item.href || isChildActive(item.children, activePath); %>
+        <li
+          class="m-menu__item app-sidebar__item app-sidebar__item--<%= moduleKey %> <%= itemActive ? 'm-menu__item--active app-sidebar__item--open' : '' %>"
+          data-sidebar-key="item-<%= index %>"
+          data-sidebar-active="<%= itemActive ? 'true' : 'false' %>"
+        >
+          <div class="app-sidebar__row">
+            <a class="app-sidebar__link" href="<%= item.href || '#' %>">
+              <span class="app-sidebar__icon-wrap app-sidebar__icon-wrap--<%= moduleKey %>">
+                <%- renderIconByModule(moduleKey, "main") %>
+              </span>
+              <span class="app-sidebar__text"><%= localizeLabel(item.label || item.title, item.href) %></span>
+            </a>
+
+            <% if (hasChildren) { %>
+              <button class="app-sidebar__dropdown" type="button" aria-expanded="<%= itemActive ? 'true' : 'false' %>">
+                <svg class="app-sidebar__dropdown-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M7 10l5 5 5-5"></path>
+                </svg>
+              </button>
+            <% } %>
+          </div>
+
+          <% if (hasChildren) { %>
+            <div class="app-sidebar__submenu app-sidebar__submenu--<%= moduleKey %>">
+              <% item.children.forEach((child) => { %>
+                <% const childActive = activePath === child.href; %>
+                <a
+                  class="app-sidebar__submenu-link app-sidebar__submenu-link--<%= moduleKey %> <%= childActive ? 'is-active' : '' %>"
+                  href="<%= child.href || '#' %>"
+                  aria-current="<%= childActive ? 'page' : 'false' %>"
+                >
+                  <span class="app-sidebar__submenu-icon"><%- renderIconByModule(moduleKey, "submenu") %></span>
+                  <span class="app-sidebar__submenu-text"><%= localizeLabel(child.label || child.title, child.href) %></span>
+                </a>
+              <% }) %>
+            </div>
+          <% } %>
+        </li>
+      <% }) %>
+    </ul>
+  </div>
+
+  <% if (locals.currentUser) { %>
+    <div class="app-sidebar__footer">
+      <form action="/logout" method="post">
+        <button class="app-sidebar__logout" type="submit">
+          <span class="app-sidebar__icon-wrap app-sidebar__icon-wrap--logout">
+            <svg class="app-sidebar__svg" viewBox="0 0 24 24" aria-hidden="true">
+              <path class="app-sidebar__svg-duotone" d="M5 4h8a2 2 0 0 1 2 2v2h-2V6H5v12h8v-2h2v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"></path>
+              <path class="app-sidebar__svg-stroke" d="M11 12h10M18 8l4 4-4 4"></path>
+            </svg>
+          </span>
+          <span class="app-sidebar__text">Đăng xuất</span>
+        </button>
+      </form>
+    </div>
+  <% } %>
+</aside>

@@ -1,0 +1,205 @@
+<%- include("components/head", { pageTitle, extraStyles }) %>
+
+<div class="m-grid m-grid--hor m-grid--root m-page">
+  <%- include("components/header") %>
+  <div class="m-grid__item m-grid__item--fluid m-grid m-grid--ver-desktop m-grid--desktop m-body">
+    <%- include("components/sidebar", { navItems, activePath }) %>
+    <div class="m-grid__item m-grid__item--fluid m-wrapper">
+      <%- include("components/auth-context") %>
+      <%- include("components/subheader", {
+        title: formMode === "create" ? "Thêm mới trả góp" : "Cập nhật trả góp",
+        subtitle: formMode === "create" ? "Nhập nhanh thông tin trả góp, hệ thống tự tính lịch đóng còn lại" : "Cập nhật thông tin và lịch đóng của hợp đồng trả góp"
+      }) %>
+
+      <div class="m-content">
+        <div class="m-portlet installment-form-portlet">
+          <div class="m-portlet__body">
+            <% const selectedInstallerName = String(installment?.installerName ?? defaultInstallerName ?? '').trim(); %>
+            <% const selectedPaymentMethod = String(installment?.paymentMethod ?? 'daily').trim() || 'daily'; %>
+            <% const selectedCollectionIntervalDays = Number(installment?.collectionIntervalDays ?? 1) || 1; %>
+            <% const selectedPrepaidPeriodCount = Number(installment?.prepaidPeriodCount ?? 0) || 0; %>
+            <% const selectedRevenue = installment?.revenue ?? ''; %>
+            <% const selectedLoanPackage = installment?.loanPackage ?? ''; %>
+            <% const selectedLoanDays = installment?.loanDays ?? 50; %>
+            <% const selectedLoanDate = installment?.loanDate ?? new Date().toISOString().slice(0, 10); %>
+
+            <form method="post" action="<%= formMode === 'create' ? '/Installment/Create' : '/Installment/Edit/' + installment.id %>">
+              <div class="installment-contract-layout">
+                <div class="installment-contract-main">
+                  <div class="installment-form-card installment-form-card--soft">
+                    <div class="installment-form-card__header">
+                      <div>
+                        <h3 class="installment-form-card__title">Thông tin trả góp</h3>
+                        <p class="installment-form-card__subtitle">Trả góp là tổng tiền khách phải đóng. Tiền đưa khách là số tiền khách thực nhận.</p>
+                      </div>
+                    </div>
+
+                    <div class="installment-form-grid installment-form-grid--contract">
+                      <label class="installment-field installment-field--span-2">
+                        <span class="installment-field__label">Cửa hàng</span>
+                        <select class="form-control m-input" name="shopId" <%= canSelectShop ? '' : 'disabled' %> required>
+                          <option value="">Chọn cửa hàng</option>
+                          <% shopOptions.forEach((shopOption) => { %>
+                            <% const selectedShopId = installment?.shopId ?? defaultShopId; %>
+                            <option value="<%= shopOption.id %>" <%= selectedShopId === shopOption.id ? 'selected' : '' %>><%= shopOption.name %></option>
+                          <% }) %>
+                        </select>
+                        <% if (!canSelectShop) { %>
+                          <input type="hidden" name="shopId" value="<%= installment?.shopId ?? defaultShopId %>">
+                        <% } %>
+                      </label>
+
+                      <% if (formMode === "edit") { %>
+                        <label class="installment-field">
+                          <span class="installment-field__label">STT</span>
+                          <input class="form-control m-input" type="number" name="stt" value="<%= installment?.stt ?? '' %>" readonly>
+                        </label>
+                      <% } %>
+
+                      <label class="installment-field installment-field--span-2">
+                        <span class="installment-field__label">Tên Khách hàng *</span>
+                        <input class="form-control m-input" type="text" name="customerRef" value="<%= installment?.customerRef ?? '' %>" placeholder="Nhập tên khách hàng" required>
+                      </label>
+
+                      <label class="installment-field installment-field--money">
+                        <span class="installment-field__label">Trả Góp *</span>
+                        <div class="installment-money-input">
+                          <input class="form-control m-input" type="text" name="revenue" inputmode="numeric" data-money-input="true" placeholder="0 ₫" value="<%= selectedRevenue %>" required>
+                          <span class="installment-money-input__suffix">VNĐ</span>
+                        </div>
+                        <small class="installment-field__hint installment-field__hint--danger">(Chú ý: Trả góp nghĩa là tổng tiền khách phải đóng)</small>
+                      </label>
+
+                      <label class="installment-field installment-field--money">
+                        <span class="installment-field__label">Tiền đưa khách *</span>
+                        <div class="installment-money-input">
+                          <input class="form-control m-input" type="text" name="loanPackage" inputmode="numeric" data-money-input="true" placeholder="0 ₫" value="<%= selectedLoanPackage %>" required>
+                          <span class="installment-money-input__suffix">VNĐ</span>
+                        </div>
+                        <small class="installment-field__hint">(Tổng tiền khách nhận được)</small>
+                      </label>
+
+                      <label class="installment-field">
+                        <span class="installment-field__label">Hình thức *</span>
+                        <select class="form-control m-input" name="paymentMethod">
+                          <option value="daily" <%= selectedPaymentMethod === 'daily' ? 'selected' : '' %>>Theo ngày</option>
+                          <option value="periodic" <%= selectedPaymentMethod === 'periodic' ? 'selected' : '' %>>Theo kỳ</option>
+                        </select>
+                      </label>
+
+                      <label class="installment-field">
+                        <span class="installment-field__label">Thời gian vay *</span>
+                        <div class="installment-inline-input">
+                          <input class="form-control m-input" type="number" min="1" name="loanDays" value="<%= selectedLoanDays %>" required>
+                          <span class="installment-inline-input__suffix">Ngày</span>
+                        </div>
+                        <small class="installment-field__hint">( <span id="installmentDailyAmount">0 VNĐ</span> / 1 ngày )</small>
+                      </label>
+
+                      <label class="installment-field">
+                        <span class="installment-field__label">Số ngày đóng tiền *</span>
+                        <input class="form-control m-input" type="number" min="1" name="collectionIntervalDays" value="<%= selectedCollectionIntervalDays %>" required>
+                        <small class="installment-field__hint">(VD: 3 ngày đóng 1 lần thì điền số 3)</small>
+                      </label>
+
+                      <label class="installment-field">
+                        <span class="installment-field__label">Ngày vay *</span>
+                        <input class="form-control m-input" type="date" name="loanDate" value="<%= selectedLoanDate %>" required>
+                      </label>
+
+                      <label class="installment-field installment-field--checkbox">
+                        <span class="installment-field__label">Thu trả góp trước</span>
+                        <label class="installment-checkbox">
+                          <input type="checkbox" name="collectInAdvance" value="1" <%= selectedPrepaidPeriodCount > 0 ? 'checked' : '' %>>
+                          <span>Khách đã đóng trước 1 kỳ đầu tiên</span>
+                        </label>
+                      </label>
+
+                      <label class="installment-field installment-field--span-2">
+                        <span class="installment-field__label">Ghi chú</span>
+                        <textarea class="form-control m-input" name="note" rows="4" placeholder="Ghi chú thêm về hợp đồng"><%= installment?.note ?? '' %></textarea>
+                      </label>
+
+                      <label class="installment-field">
+                        <span class="installment-field__label">NV thu tiền</span>
+                        <select class="form-control m-input" name="installerName" id="installerName">
+                          <option value="">Chọn nhân viên</option>
+                          <% installerOptions.forEach((installerOption) => { %>
+                            <option value="<%= installerOption.value %>" data-shop-id="<%= Number(installerOption.shopId || 0) %>" <%= selectedInstallerName === installerOption.value ? 'selected' : '' %>><%= installerOption.label %></option>
+                          <% }) %>
+                        </select>
+                        <small class="installment-field__hint">(Người đi thu tiền trả góp cho HĐ)</small>
+                      </label>
+
+                      <label class="installment-field">
+                        <span class="installment-field__label">Cộng tác viên</span>
+                        <input class="form-control m-input" type="text" name="mc" value="<%= installment?.mc ?? '' %>" placeholder="Nhập tên hoặc mã cộng tác viên">
+                      </label>
+                    </div>
+                  </div>
+
+                  <input type="hidden" name="setupFee" value="<%= installment?.setupFee ?? 0 %>">
+                  <input type="hidden" name="netDisbursement" value="<%= installment?.netDisbursement ?? 0 %>">
+                  <input type="hidden" name="referralFee" value="<%= installment?.referralFee ?? 0 %>">
+                  <input type="hidden" name="paidBefore" value="<%= installment?.paidBefore ?? 0 %>">
+                  <input type="hidden" name="installmentAmount" value="<%= installment?.installmentAmount ?? 0 %>">
+                  <input type="hidden" name="paymentDay" value="<%= installment?.paymentDay ?? '' %>">
+                  <input type="hidden" name="prepaidPeriodCount" value="<%= selectedPrepaidPeriodCount %>">
+                  <input type="hidden" name="statusCode" value="<%= installment?.statusCode ?? '' %>">
+                  <input type="hidden" name="statusText" value="<%= installment?.statusText ?? '' %>">
+                  <input type="hidden" name="imei" value="<%= installment?.imei ?? '' %>">
+                </div>
+
+                <aside class="installment-contract-side">
+                  <div class="installment-form-card installment-form-card--summary">
+                    <div class="installment-form-card__header">
+                      <div>
+                        <h3 class="installment-form-card__title">Tóm tắt tính toán</h3>
+                        <p class="installment-form-card__subtitle">Ngày tất toán = Ngày vay + Thời gian vay.</p>
+                      </div>
+                    </div>
+
+                    <div class="installment-metrics">
+                      <div class="installment-metric">
+                        <span class="installment-metric__label">Ngày tất toán</span>
+                        <strong class="installment-metric__value" id="installmentDueDate">-</strong>
+                      </div>
+                      <div class="installment-metric">
+                        <span class="installment-metric__label">Tổng số kỳ</span>
+                        <strong class="installment-metric__value" id="installmentPeriodCount">0</strong>
+                      </div>
+                      <div class="installment-metric">
+                        <span class="installment-metric__label">Đã thu trước</span>
+                        <strong class="installment-metric__value" id="installmentPrepaidSummary">0 kỳ</strong>
+                      </div>
+                      <div class="installment-metric">
+                        <span class="installment-metric__label">Còn lại</span>
+                        <strong class="installment-metric__value" id="installmentRemainingPeriods">0 kỳ</strong>
+                      </div>
+                    </div>
+
+                    <div class="installment-preview">
+                      <div class="installment-preview__header">
+                        <strong>Lịch thu dự kiến</strong>
+                        <span id="installmentPreviewCaption">Chưa có dữ liệu</span>
+                      </div>
+                      <div id="installmentPreviewList" class="installment-preview__list"></div>
+                    </div>
+                  </div>
+                </aside>
+              </div>
+
+              <div class="installment-form-actions">
+                <a href="/Installment/Index/" class="btn btn-secondary">Quay lại danh sách</a>
+                <button class="btn btn-brand" type="submit"><%= formMode === "create" ? "Lưu lại" : "Cập nhật" %></button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%- include("components/flash") %>
+<%- include("components/scripts", { extraScripts, inlineScripts }) %>

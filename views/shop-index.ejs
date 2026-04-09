@@ -1,0 +1,134 @@
+<%- include("components/head", { pageTitle, extraStyles }) %>
+
+<div class="m-grid m-grid--hor m-grid--root m-page">
+  <%- include("components/header") %>
+  <div class="m-grid__item m-grid__item--fluid m-grid m-grid--ver-desktop m-grid--desktop m-body">
+    <%- include("components/sidebar", { navItems, activePath }) %>
+    <div class="m-grid__item m-grid__item--fluid m-wrapper">
+      <%- include("components/auth-context") %>
+      <%- include("components/subheader", { title: "Cửa hàng", subtitle: "Danh sách nội bộ với bộ lọc, thống kê và CRUD theo logic trang cũ" }) %>
+
+      <div class="m-content">
+        <div class="m-portlet shop-page">
+          <div class="m-portlet__body">
+            <div class="shop-dashboard">
+              <div class="shop-dashboard__card">
+                <div class="shop-dashboard__label">Tong cua hang</div>
+                <div class="shop-dashboard__value" id="shopDashboardTotal"><%= bootstrap.dashboard.totalShops %></div>
+              </div>
+              <div class="shop-dashboard__card">
+                <div class="shop-dashboard__label">Đang hoạt động</div>
+                <div class="shop-dashboard__value" id="shopDashboardActive"><%= bootstrap.dashboard.activeShops %></div>
+              </div>
+              <div class="shop-dashboard__card">
+                <div class="shop-dashboard__label">Da tam dung</div>
+                <div class="shop-dashboard__value" id="shopDashboardInactive"><%= bootstrap.dashboard.inactiveShops %></div>
+              </div>
+              <div class="shop-dashboard__card">
+                <div class="shop-dashboard__label">Tong von dau tu</div>
+                <div class="shop-dashboard__value" id="shopDashboardMoney"><%= Number(bootstrap.dashboard.totalMoney || 0).toLocaleString("vi-VN") %> ₫</div>
+              </div>
+              <div class="shop-dashboard__card">
+                <div class="shop-dashboard__label">Von trung binh</div>
+                <div class="shop-dashboard__value" id="shopDashboardAverage"><%= Math.round(bootstrap.dashboard.averageMoney || 0).toLocaleString("vi-VN") %> ₫</div>
+              </div>
+            </div>
+
+            <div class="shop-toolbar">
+              <div class="shop-toolbar__group shop-toolbar__group--grow">
+                <label class="shop-field">
+                  <span class="shop-field__label">Tìm kiếm</span>
+                  <input id="generalSearch" class="form-control m-input" type="text" placeholder="Tên, địa chỉ, điện thoại, đại diện...">
+                </label>
+
+                <label class="shop-field">
+                  <span class="shop-field__label">Tình trạng</span>
+                  <select id="statusFilter" class="form-control m-input">
+                    <option value="100">Tất cả</option>
+                    <option value="1">Đang hoạt động</option>
+                    <option value="0">Đã tạm dừng</option>
+                  </select>
+                </label>
+
+                <label class="shop-field shop-field--small">
+                  <span class="shop-field__label">Mỗi trang</span>
+                  <select id="perPageFilter" class="form-control m-input">
+                    <option value="25">25</option>
+                    <option value="50" selected>50</option>
+                    <option value="100">100</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="shop-toolbar__group">
+                <% if (canCreateShop) { %>
+                  <a href="/Shop/Create" class="btn btn-accent">Thêm mới</a>
+                <% } %>
+                <button id="btnReloadData" class="btn btn-secondary" type="button">Lấy dữ liệu</button>
+              </div>
+            </div>
+
+            <div class="app-bulk-actions">
+              <div id="shopSelectedInfo" class="app-table__selection">Đã chọn 0 dòng</div>
+              <div class="app-bulk-actions__buttons">
+                <% if (canBulkUpdateShopStatus) { %>
+                  <button id="btnShopBulkStatus" class="btn btn-secondary" type="button">Đổi trạng thái</button>
+                <% } %>
+                <button id="btnShopExport" class="btn btn-info" type="button">Export CSV</button>
+                <% if (canDeleteShop) { %>
+                  <button id="btnShopBulkDelete" class="btn btn-danger" type="button">Xóa đã chọn</button>
+                <% } %>
+              </div>
+            </div>
+
+            <div class="shop-table-wrap">
+              <table class="table table-bordered table-hover shop-table">
+                <thead>
+                  <tr>
+                    <th class="app-table__select-head">
+                      <input id="shopSelectAll" class="app-table__checkbox" type="checkbox" aria-label="Chọn tất cả">
+                    </th>
+                    <th data-sort="name">Cửa hàng</th>
+                    <th data-sort="address">Địa chỉ</th>
+                    <th data-sort="phone">Điện thoại</th>
+                    <th>Đại diện</th>
+                    <th data-sort="totalMoney" class="text-right">Vốn đầu tư</th>
+                    <th data-sort="createdDate" class="text-center">Ngày tạo</th>
+                    <th data-sort="status" class="text-center">Tình trạng</th>
+                    <th>Chức năng</th>
+                  </tr>
+                </thead>
+                <tbody id="shopTableBody">
+                  <tr>
+                    <td colspan="9" class="text-center text-muted">Đang tải dữ liệu...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="shop-footer">
+              <div>
+                <div id="shopTableMeta" class="shop-footer__meta"></div>
+              </div>
+              <div id="shopPagination" class="shop-pagination"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%- include("components/flash") %>
+<script>
+  window.__SHOP_PAGE__ = {
+    listUrl: "/shop/api/list",
+    transferOptionsUrl: "/shop/api/transfer-options",
+    deleteUrlBase: "/shop/api",
+    bulkDeleteUrl: "/shop/api/bulk-delete",
+    bulkStatusUrl: "/shop/api/bulk-status",
+    canDeleteShop: <%= canDeleteShop ? 'true' : 'false' %>,
+    canBulkUpdateShopStatus: <%= canBulkUpdateShopStatus ? 'true' : 'false' %>
+  };
+</script>
+<%- include("components/scripts", { extraScripts, inlineScripts }) %>

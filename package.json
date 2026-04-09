@@ -1,0 +1,36 @@
+{
+  "name": "2gold-node-ts",
+  "version": "1.0.0",
+  "private": true,
+  "description": "2Gold Node.js + TypeScript application",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "tsx src/server.ts",
+    "build": "tsc",
+    "start": "tsx src/server.ts",
+    "test": "node --test tests/**/*.js",
+    "test:e2e:delete": "node scripts/playwright-delete-shop-smoke.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "better-sqlite3": "^12.2.0",
+    "cheerio": "^1.1.2",
+    "ejs": "^3.1.10",
+    "express": "^4.21.2",
+    "express-session": "^1.18.2",
+    "multer": "^2.0.2",
+    "tsx": "^4.20.6",
+    "vn-provinces-wards": "^1.0.2",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/ejs": "^3.1.5",
+    "@types/express": "^4.17.23",
+    "@types/express-session": "^1.18.2",
+    "@types/multer": "^2.0.0",
+    "@types/node": "^24.6.0",
+    "playwright": "^1.59.1",
+    "typescript": "^5.9.3"
+  }
+}

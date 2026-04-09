@@ -1,0 +1,20 @@
+<%
+  const flashMessage = locals.flash || null;
+%>
+<% if (flashMessage && (flashMessage.title || flashMessage.text)) { %>
+  <script>
+    window.__FLASH__ = <%- JSON.stringify({
+      type: flashMessage.type || "info",
+      title: flashMessage.title || "",
+      text: flashMessage.text || "",
+      mode: flashMessage.mode || "modal"
+    }) %>;
+  </script>
+<% } %>
+
+<div id="appSidebarOverlay" class="app-sidebar-overlay" hidden></div>
+<button id="appScrollTop" class="app-scroll-top" type="button" aria-label="Lên đầu trang">
+  <svg class="app-scroll-top__icon" viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M12 5 6 11h4v8h4v-8h4z"></path>
+  </svg>
+</button>

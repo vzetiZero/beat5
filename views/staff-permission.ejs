@@ -1,0 +1,133 @@
+<%- include("components/head", { pageTitle, extraStyles }) %>
+
+<div class="m-grid m-grid--hor m-grid--root m-page">
+  <%- include("components/header") %>
+  <div class="m-grid__item m-grid__item--fluid m-grid m-grid--ver-desktop m-grid--desktop m-body">
+    <%- include("components/sidebar", { navItems, activePath }) %>
+    <div class="m-grid__item m-grid__item--fluid m-wrapper">
+      <%- include("components/auth-context") %>
+      <%- include("components/subheader", {
+        title: "Phân quyền",
+        subtitle: "Chỉ admin được gán role, scope cửa hàng và module cho nhân viên"
+      }) %>
+
+      <div class="m-content">
+        <div class="staff-permission-layout">
+          <div class="m-portlet staff-page">
+            <div class="m-portlet__body">
+              <div class="staff-page__section-title">Danh sách nhân viên</div>
+              <div class="staff-table-wrap">
+                <table class="table table-bordered table-hover staff-table">
+                  <thead>
+                    <tr>
+                      <th>Họ tên</th>
+                      <th>Tài khoản</th>
+                      <th>Cửa hàng</th>
+                      <th>Role</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <% if (!staffItems.length) { %>
+                      <tr>
+                        <td colspan="5" class="text-center text-muted">Chưa có nhân viên để phân quyền.</td>
+                      </tr>
+                    <% } %>
+                    <% staffItems.forEach((staff) => { %>
+                      <tr>
+                        <td><%= staff.fullName %></td>
+                        <td><%= staff.username %></td>
+                        <td><%= staff.shopName %></td>
+                        <td><%= staff.role === 'admin' ? 'Admin' : 'Nhân viên' %></td>
+                        <td class="text-center">
+                          <a class="btn btn-sm btn-secondary" href="/Staff/PermissionStaff/?StaffID=<%= staff.id %>">Chọn</a>
+                        </td>
+                      </tr>
+                    <% }) %>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="m-portlet staff-page">
+            <div class="m-portlet__body">
+              <div class="staff-page__section-title">Cập nhật quyền</div>
+              <% if (!selectedStaff) { %>
+                <div class="text-muted">Chọn một nhân viên bên trái để cập nhật role và quyền truy cập.</div>
+              <% } else { %>
+                <form method="post" action="/Staff/PermissionStaff/<%= selectedStaff.id %>">
+                  <div class="staff-form-grid">
+                    <label class="staff-field staff-field--span-2">
+                      <span class="staff-field__label">Nhân viên</span>
+                      <input class="form-control m-input" type="text" value="<%= selectedStaff.fullName %> (<%= selectedStaff.username %>)" disabled>
+                    </label>
+
+                    <label class="staff-field">
+                      <span class="staff-field__label">Role</span>
+                      <select class="form-control m-input" name="role">
+                        <option value="staff" <%= selectedStaff.role === 'staff' ? 'selected' : '' %>>Nhân viên</option>
+                        <option value="admin" <%= selectedStaff.role === 'admin' ? 'selected' : '' %>>Admin</option>
+                      </select>
+                    </label>
+
+                    <label class="staff-field">
+                      <span class="staff-field__label">Cửa hàng mặc định</span>
+                      <select class="form-control m-input" name="shopId" required>
+                        <% shopOptions.forEach((shop) => { %>
+                          <option value="<%= shop.id %>" <%= selectedStaff.shopId === shop.id ? 'selected' : '' %>><%= shop.name %></option>
+                        <% }) %>
+                      </select>
+                    </label>
+
+                    <label class="staff-field">
+                      <span class="staff-field__label">Truy cập tất cả cửa hàng</span>
+                      <select class="form-control m-input" name="canAccessAllShops">
+                        <option value="0" <%= !selectedStaff.canAccessAllShops ? 'selected' : '' %>>Chỉ shop được gán</option>
+                        <option value="1" <%= selectedStaff.canAccessAllShops ? 'selected' : '' %>>Tất cả cửa hàng</option>
+                      </select>
+                    </label>
+
+                    <label class="staff-field staff-field--span-2">
+                      <span class="staff-field__label">Shop được phép thao tác</span>
+                      <select class="form-control m-input" name="allowedShopIds" multiple size="6">
+                        <% shopOptions.forEach((shop) => { %>
+                          <option value="<%= shop.id %>" <%= selectedStaff.allowedShopIds.includes(shop.id) || selectedStaff.shopId === shop.id ? 'selected' : '' %>><%= shop.name %></option>
+                        <% }) %>
+                      </select>
+                    </label>
+
+                    <div class="staff-field staff-field--span-2">
+                      <span class="staff-field__label">Quyền module</span>
+                      <div class="staff-permission-grid">
+                        <label class="staff-check">
+                          <input type="checkbox" name="modulePermissions" value="installment" <%= selectedStaff.modulePermissions.includes('installment') ? 'checked' : '' %>>
+                          <span>Trả góp</span>
+                        </label>
+                        <label class="staff-check">
+                          <input type="checkbox" name="modulePermissions" value="shop" <%= selectedStaff.modulePermissions.includes('shop') ? 'checked' : '' %>>
+                          <span>Cửa hàng</span>
+                        </label>
+                        <label class="staff-check">
+                          <input type="checkbox" name="modulePermissions" value="staff" <%= selectedStaff.modulePermissions.includes('staff') ? 'checked' : '' %>>
+                          <span>Nhân viên</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="staff-form-actions">
+                    <button class="btn btn-brand" type="submit">Lưu phân quyền</button>
+                  </div>
+                </form>
+              <% } %>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%- include("components/flash") %>
+<%- include("components/scripts", { extraScripts, inlineScripts }) %>

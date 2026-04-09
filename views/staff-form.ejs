@@ -1,0 +1,104 @@
+<%- include("components/head", { pageTitle, extraStyles }) %>
+
+<div class="m-grid m-grid--hor m-grid--root m-page">
+  <%- include("components/header") %>
+  <div class="m-grid__item m-grid__item--fluid m-grid m-grid--ver-desktop m-grid--desktop m-body">
+    <%- include("components/sidebar", { navItems, activePath }) %>
+    <div class="m-grid__item m-grid__item--fluid m-wrapper">
+      <%- include("components/auth-context") %>
+      <%- include("components/subheader", {
+        title: formMode === "create" ? "Thêm mới nhân viên" : "Cập nhật nhân viên",
+        subtitle: formMode === "create" ? "Nhập thông tin nhân viên và gán cửa hàng" : "Cập nhật thông tin nhân viên hiện có"
+      }) %>
+
+      <div class="m-content">
+        <div class="m-portlet staff-form-portlet">
+          <div class="m-portlet__body">
+            <form method="post" action="/Staff/Create">
+              <% if (staff) { %>
+                <input type="hidden" name="StaffID" value="<%= staff.id %>">
+              <% } %>
+
+              <div class="staff-form-grid">
+                <label class="staff-field">
+                  <span class="staff-field__label">Tài khoản</span>
+                  <input class="form-control m-input" type="text" name="username" value="<%= staff?.username ?? '' %>" required>
+                </label>
+
+                <label class="staff-field">
+                  <span class="staff-field__label">Mật khẩu</span>
+                  <input
+                    class="form-control m-input"
+                    type="password"
+                    name="password"
+                    value=""
+                    <%= formMode === "create" ? "required" : "" %>
+                    autocomplete="new-password"
+                    placeholder="<%= formMode === 'create' ? 'Nhập mật khẩu cho nhân viên' : 'Nhập mật khẩu mới nếu cần đổi' %>"
+                  >
+                  <small class="text-muted">Bắt buộc khi tạo mới. Nhập mật khẩu mới nếu cần đổi khi cập nhật.</small>
+                </label>
+
+                <label class="staff-field">
+                  <span class="staff-field__label">Remote User ID</span>
+                  <input class="form-control m-input" type="number" name="remoteUserId" value="<%= staff?.remoteUserId ?? '' %>">
+                </label>
+
+                <label class="staff-field">
+                  <span class="staff-field__label">Họ tên</span>
+                  <input class="form-control m-input" type="text" name="fullName" value="<%= staff?.fullName ?? '' %>" required>
+                </label>
+
+                <label class="staff-field">
+                  <span class="staff-field__label">Email</span>
+                  <input class="form-control m-input" type="email" name="email" value="<%= staff?.email ?? '' %>">
+                </label>
+
+                <label class="staff-field">
+                  <span class="staff-field__label">Điện thoại</span>
+                  <input class="form-control m-input" type="text" name="phone" value="<%= staff?.phone ?? '' %>">
+                </label>
+
+                <label class="staff-field">
+                  <span class="staff-field__label">Ngày tạo</span>
+                  <input class="form-control m-input" type="date" name="createdDate" value="<%= staff?.createdDate ?? '' %>">
+                </label>
+
+                <label class="staff-field">
+                  <span class="staff-field__label">Cửa hàng</span>
+                  <select class="form-control m-input" name="shopId" required>
+                    <option value="">Chọn cửa hàng</option>
+                    <% shopOptions.forEach((shop) => { %>
+                      <option value="<%= shop.id %>" <%= staff?.shopId === shop.id ? 'selected' : '' %>><%= shop.name %></option>
+                    <% }) %>
+                  </select>
+                </label>
+
+                <label class="staff-field">
+                  <span class="staff-field__label">Tình trạng</span>
+                  <select class="form-control m-input" name="status">
+                    <option value="1" <%= !staff || staff.status === 1 ? 'selected' : '' %>>Đang làm việc</option>
+                    <option value="0" <%= staff?.status === 0 ? 'selected' : '' %>>Tạm khóa</option>
+                  </select>
+                </label>
+
+                <label class="staff-field staff-field--span-2">
+                  <span class="staff-field__label">Nơi làm việc</span>
+                  <textarea class="form-control m-input" name="workAddress" rows="4"><%= staff?.workAddress ?? '' %></textarea>
+                </label>
+              </div>
+
+              <div class="staff-form-actions">
+                <a href="/Staff/Index/" class="btn btn-secondary">Quay lại danh sách</a>
+                <button class="btn btn-brand" type="submit"><%= formMode === "create" ? "Lưu mới" : "Cập nhật" %></button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%- include("components/flash") %>
+<%- include("components/scripts", { extraScripts, inlineScripts }) %>

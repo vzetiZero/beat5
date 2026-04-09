@@ -1,0 +1,17 @@
+<%- include("components/head", { pageTitle, extraStyles }) %>
+
+<div class="m-grid m-grid--hor m-grid--root m-page">
+  <%- include("components/header") %>
+  <div class="m-grid__item m-grid__item--fluid m-grid m-grid--ver-desktop m-grid--desktop m-body">
+    <%- include("components/sidebar", { navItems, activePath }) %>
+    <div class="m-grid__item m-grid__item--fluid m-wrapper">
+      <%- include("components/auth-context") %>
+      <%- hiddenInputsHtml %>
+      <%- subheaderHtml %>
+      <%- contentHtml %>
+    </div>
+  </div>
+</div>
+
+<%- include("components/flash") %>
+<%- include("components/scripts", { extraScripts, inlineScripts }) %>

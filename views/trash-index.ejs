@@ -1,0 +1,88 @@
+<%- include("components/head", { pageTitle, extraStyles }) %>
+
+<div class="m-grid m-grid--hor m-grid--root m-page">
+  <%- include("components/header") %>
+  <div class="m-grid__item m-grid__item--fluid m-grid m-grid--ver-desktop m-grid--desktop m-body">
+    <%- include("components/sidebar", { navItems, activePath }) %>
+    <div class="m-grid__item m-grid__item--fluid m-wrapper">
+      <%- include("components/auth-context") %>
+      <%- include("components/subheader", { title: "Thùng rác", subtitle: "Quản lý dữ liệu đã xóa và khôi phục khi cần" }) %>
+
+      <div class="m-content">
+        <div class="m-portlet trash-page">
+          <div class="m-portlet__body">
+            <div class="trash-toolbar">
+              <div class="trash-toolbar__group trash-toolbar__group--grow">
+                <label class="trash-field trash-field--grow">
+                  <span class="trash-field__label">Tìm kiếm</span>
+                  <input id="generalSearch" class="form-control m-input" type="text" placeholder="Ten ban ghi, loai du lieu, nguoi xoa...">
+                </label>
+
+                <label class="trash-field">
+                  <span class="trash-field__label">Loai du lieu</span>
+                  <select id="entityTypeFilter" class="form-control m-input">
+                    <option value="">Tất cả</option>
+                  </select>
+                </label>
+
+                <label class="trash-field trash-field--small">
+                  <span class="trash-field__label">Mỗi trang</span>
+                  <select id="perPageFilter" class="form-control m-input">
+                    <option value="25">25</option>
+                    <option value="50" selected>50</option>
+                    <option value="100">100</option>
+                    <option value="200">200</option>
+                  </select>
+                </label>
+
+                <label class="trash-check">
+                  <input id="includeRestored" type="checkbox">
+                  <span>Hien ca da khoi phuc</span>
+                </label>
+              </div>
+
+              <div class="trash-toolbar__group">
+                <button id="btnReloadTrash" class="btn btn-secondary" type="button">Lam moi</button>
+              </div>
+            </div>
+
+            <div class="trash-table-wrap">
+              <table class="table table-bordered table-hover trash-table">
+                <thead>
+                  <tr>
+                    <th>Thoi gian xoa</th>
+                    <th>Loai</th>
+                    <th>Nhan</th>
+                    <th>Entity ID</th>
+                    <th>Nguoi xoa</th>
+                    <th>Trang thai</th>
+                    <th>Hanh dong</th>
+                  </tr>
+                </thead>
+                <tbody id="trashTableBody">
+                  <tr>
+                    <td colspan="7" class="text-center text-muted">Đang tải dữ liệu...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="trash-footer">
+              <div id="trashTableMeta" class="trash-footer__meta"></div>
+              <div id="trashPagination" class="trash-pagination"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%- include("components/flash") %>
+<script>
+  window.__TRASH_PAGE__ = {
+    listUrl: "/trash/api/list",
+    restoreUrlBase: "/trash/api/restore"
+  };
+</script>
+<%- include("components/scripts", { extraScripts, inlineScripts }) %>

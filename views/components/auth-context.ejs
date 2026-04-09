@@ -1,0 +1,29 @@
+<%
+  const currentUser = locals.currentUser || null;
+  const shopOptions = Array.isArray(locals.contextShopOptions) ? locals.contextShopOptions : [];
+  const activeContextShop = locals.activeContextShop || null;
+%>
+<div class="app-context">
+  <div>
+    <% if (currentUser) { %>
+      <strong><%= currentUser.displayName || currentUser.username %></strong>
+      <span class="text-muted"> | Vai trò: <%= currentUser.role || '-' %></span>
+      <% if (activeContextShop) { %>
+        <span class="text-muted"> | Cửa hàng: <%= activeContextShop.name %></span>
+      <% } %>
+    <% } %>
+  </div>
+
+  <% if (currentUser && shopOptions.length > 1) { %>
+    <form class="app-topbar__shop-switch" method="post" action="/context/shop">
+      <input type="hidden" name="returnTo" value="<%= locals.currentPath || '/' %>">
+      <div class="form-group" style="margin:0;">
+        <select class="form-control m-input app-topbar__shop-select" name="shopId" onchange="this.form.submit()">
+          <% shopOptions.forEach((shop) => { %>
+            <option value="<%= shop.id %>" <%= currentUser.shopId === shop.id ? 'selected' : '' %>><%= shop.name %></option>
+          <% }) %>
+        </select>
+      </div>
+    </form>
+  <% } %>
+</div>

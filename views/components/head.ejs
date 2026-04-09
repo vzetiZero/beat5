@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title><%= pageTitle || "2Gold" %></title>
+  <link rel="icon" type="image/svg+xml" href="/public/assets/favicon.svg">
+  <link rel="stylesheet" href="/Template/assets/vendors/base/vendors.bundle.css">
+  <link rel="stylesheet" href="/Template/assets/demo/default/base/style.bundle.css">
+  <link rel="stylesheet" href="/public/app.css">
+  <% (extraStyles || []).forEach((href) => { %>
+    <link rel="stylesheet" href="<%= href %>">
+  <% }) %>
+</head>
+<body class="m-page--fluid m-header--fixed m-header-mobile--fixed m-aside-left--enabled m-aside-left--skin-dark">

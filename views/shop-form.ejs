@@ -1,0 +1,149 @@
+<%- include("components/head", { pageTitle, extraStyles }) %>
+
+<div class="m-grid m-grid--hor m-grid--root m-page">
+  <%- include("components/header") %>
+  <div class="m-grid__item m-grid__item--fluid m-grid m-grid--ver-desktop m-grid--desktop m-body">
+    <%- include("components/sidebar", { navItems, activePath }) %>
+    <div class="m-grid__item m-grid__item--fluid m-wrapper">
+      <%- include("components/auth-context") %>
+      <%- include("components/subheader", {
+        title: formMode === "create" ? "Thêm mới cửa hàng" : "Cập nhật cửa hàng",
+        subtitle: formMode === "create" ? "Nhập thông tin cửa hàng mới" : "Cập nhật thông tin cửa hàng hiện có"
+      }) %>
+
+      <div class="m-content">
+        <div class="m-portlet shop-form-portlet">
+          <div class="m-portlet__body">
+            <form method="post" action="/Shop/Create">
+              <% if (shop) { %>
+                <input type="hidden" name="ShopID" value="<%= shop.id %>">
+              <% } %>
+
+              <div class="shop-form-grid">
+                <label class="shop-field shop-field--span-2">
+                  <span class="shop-field__label">Tên cửa hàng</span>
+                  <input class="form-control m-input" type="text" name="name" value="<%= shop?.name ?? '' %>" required>
+                </label>
+
+                <label class="shop-field">
+                  <span class="shop-field__label">Điện thoại</span>
+                  <input class="form-control m-input" type="text" name="phone" value="<%= shop?.phone ?? '' %>">
+                </label>
+
+                <label class="shop-field">
+                  <span class="shop-field__label">Đại diện</span>
+                  <input class="form-control m-input" type="text" name="represent" value="<%= shop?.represent ?? '' %>">
+                </label>
+
+                <label class="shop-field">
+                  <span class="shop-field__label">Vốn đầu tư</span>
+                  <input
+                    id="shopTotalMoney"
+                    class="form-control m-input"
+                    type="text"
+                    name="totalMoney"
+                    inputmode="numeric"
+                    data-money-input="true"
+                    placeholder="0 ₫"
+                    value="<%= shop?.totalMoney ?? '' %>"
+                  >
+                </label>
+
+                <label class="shop-field">
+                  <span class="shop-field__label">Ngày tạo</span>
+                  <input class="form-control m-input" type="date" name="createdDate" value="<%= shop?.createdDate ?? '' %>">
+                </label>
+
+                <label class="shop-field">
+                  <span class="shop-field__label">Tình trạng</span>
+                  <select class="form-control m-input" name="status">
+                    <option value="1" <%= !shop || shop.status === 1 ? 'selected' : '' %>>Đang hoạt động</option>
+                    <option value="0" <%= shop?.status === 0 ? 'selected' : '' %>>Đã tạm dừng</option>
+                  </select>
+                </label>
+
+                <label class="shop-field shop-field--span-3">
+                  <span class="shop-field__label">Địa chỉ</span>
+                  <div class="shop-address-card">
+                    <div class="shop-address-card__note">
+                      Cập nhật theo dữ liệu hành chính mới. Từ 01/07/2025 hệ thống hành chính sử dụng cấp tỉnh/thành và phường/xã; ô quận/huyện được giữ lại để tương thích quy trình cũ.
+                    </div>
+
+                    <div class="shop-address-grid">
+                      <label class="shop-field shop-field--span-2">
+                        <span class="shop-field__label">Số nhà, đường, ấp</span>
+                        <input
+                          id="shopAddressDetail"
+                          class="form-control m-input"
+                          type="text"
+                          name="addressDetail"
+                          value="<%= shop?.addressDetail ?? '' %>"
+                          placeholder="Số nhà, tên đường, ấp/thôn..."
+                        >
+                      </label>
+
+                      <label class="shop-field">
+                        <span class="shop-field__label">Tỉnh / Thành phố</span>
+                        <select id="shopProvinceCode" class="form-control m-input" name="provinceCode" required>
+                          <option value="">Chọn tỉnh / thành phố</option>
+                          <% for (const province of provinceOptions) { %>
+                            <option
+                              value="<%= province.code %>"
+                              <%= shop?.provinceCode === province.code ? 'selected' : '' %>
+                            ><%= province.name %></option>
+                          <% } %>
+                        </select>
+                      </label>
+
+                      <label class="shop-field">
+                        <span class="shop-field__label">Quận / Huyện (tương thích)</span>
+                        <input
+                          id="shopDistrictName"
+                          class="form-control m-input"
+                          type="text"
+                          name="districtName"
+                          value="<%= shop?.districtName ?? '' %>"
+                          placeholder="Nhập nếu quy trình nội bộ vẫn cần"
+                        >
+                      </label>
+
+                      <label class="shop-field">
+                        <span class="shop-field__label">Phường / Xã</span>
+                        <select id="shopWardCode" class="form-control m-input" name="wardCode" required>
+                          <option value="">Chọn phường / xã</option>
+                        </select>
+                      </label>
+                    </div>
+
+                    <div class="shop-address-preview">
+                      <div class="shop-address-preview__label">Địa chỉ đầy đủ sẽ lưu</div>
+                      <div id="shopAddressPreview" class="shop-address-preview__value">
+                        <%= shop?.address ?? 'Chưa có địa chỉ được tạo.' %>
+                      </div>
+                    </div>
+                  </div>
+                </label>
+              </div>
+
+              <div class="shop-form-actions">
+                <a href="/Shop/Index/" class="btn btn-secondary">Quay lại danh sách</a>
+                <button class="btn btn-brand" type="submit"><%= formMode === "create" ? "Lưu mới" : "Cập nhật" %></button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%- include("components/flash") %>
+<script>
+  window.__SHOP_FORM__ = {
+    wardListUrl: "/shop/api/localities/wards",
+    selectedProvinceCode: <%- JSON.stringify(shop?.provinceCode ?? "") %>,
+    selectedWardCode: <%- JSON.stringify(shop?.wardCode ?? "") %>,
+    existingAddress: <%- JSON.stringify(shop?.address ?? "") %>
+  };
+</script>
+<%- include("components/scripts", { extraScripts, inlineScripts }) %>

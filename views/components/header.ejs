@@ -1,0 +1,41 @@
+<%
+  const currentUser = locals.currentUser || null;
+  const activeContextShop = locals.activeContextShop || null;
+  const onlineUserCount = Number(locals.onlineUserCount || 0);
+%>
+<header class="m-grid__item m-header app-header">
+  <div class="app-topbar">
+    <button id="appSidebarToggle" class="app-topbar__menu-toggle" type="button" aria-label="Mở menu">
+      <span class="app-topbar__menu-icon app-topbar__menu-icon--menu" aria-hidden="true">
+        <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+          <path d="M4 6h16M4 12h16M4 18h10"></path>
+        </svg>
+      </span>
+      <span class="app-topbar__menu-icon app-topbar__menu-icon--close" aria-hidden="true">
+        <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+          <path d="M6 6l12 12M18 6 6 18"></path>
+        </svg>
+      </span>
+    </button>
+
+    <div class="app-topbar__title">
+      <div class="app-topbar__heading"><%= pageTitle || "2Gold Internal" %></div>
+      <% if (activeContextShop) { %>
+        <div class="app-topbar__subtitle">Đang làm việc tại <%= activeContextShop.name %></div>
+      <% } else if (currentUser) { %>
+        <div class="app-topbar__subtitle">Quản lý hệ thống nội bộ 2Gold</div>
+      <% } %>
+    </div>
+
+    <div class="app-topbar__actions">
+      <div class="app-topbar__online">Online: <b><%= onlineUserCount %></b></div>
+
+      <% if (currentUser) { %>
+        <div class="app-topbar__shop" title="<%= currentUser.displayName || currentUser.username %>">
+          <strong><%= currentUser.displayName || currentUser.username %></strong>
+          <span class="app-topbar__role">Vai trò: <%= currentUser.role || "-" %></span>
+        </div>
+      <% } %>
+    </div>
+  </div>
+</header>

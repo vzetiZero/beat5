@@ -1,0 +1,199 @@
+<%- include("components/head", { pageTitle, extraStyles }) %>
+
+<%
+  const totalItems = auditLogs && Array.isArray(auditLogs.items) ? auditLogs.items.length : 0;
+  const pageWindowStart = Math.max(1, auditLogs.page - 2);
+  const pageWindowEnd = Math.min(auditLogs.totalPages, auditLogs.page + 2);
+  const actionClassMap = {
+    access: "history-badge--info",
+    login: "history-badge--success",
+    logout: "history-badge--muted",
+    login_failed: "history-badge--danger",
+    create: "history-badge--success",
+    import: "history-badge--brand",
+    update: "history-badge--warning",
+    delete: "history-badge--danger",
+    restore: "history-badge--success",
+    bulk_delete: "history-badge--danger",
+    bulk_status: "history-badge--warning",
+    repair: "history-badge--brand",
+    context_switch: "history-badge--info"
+  };
+%>
+
+<div class="m-grid m-grid--hor m-grid--root m-page">
+  <%- include("components/header") %>
+  <div class="m-grid__item m-grid__item--fluid m-grid m-grid--ver-desktop m-grid--desktop m-body">
+    <%- include("components/sidebar", { navItems, activePath }) %>
+    <div class="m-grid__item m-grid__item--fluid m-wrapper">
+      <%- include("components/auth-context") %>
+      <%- include("components/subheader", { title: "Lịch sử thao tác", subtitle: "Theo dõi truy cập trang, CRUD, nhập liệu và phân quyền của người dùng" }) %>
+
+      <div class="m-content">
+        <div class="m-portlet history-page">
+          <div class="m-portlet__body">
+            <div class="history-dashboard">
+              <div class="history-dashboard__card">
+                <div class="history-dashboard__label">Tong ban ghi</div>
+                <div class="history-dashboard__value"><%= Number(auditLogs.total || 0).toLocaleString("vi-VN") %></div>
+              </div>
+              <div class="history-dashboard__card">
+                <div class="history-dashboard__label">Ban ghi trang nay</div>
+                <div class="history-dashboard__value"><%= Number(totalItems).toLocaleString("vi-VN") %></div>
+              </div>
+              <div class="history-dashboard__card">
+                <div class="history-dashboard__label">Module</div>
+                <div class="history-dashboard__value"><%= auditLogs.availableModules.length %></div>
+              </div>
+              <div class="history-dashboard__card">
+                <div class="history-dashboard__label">Loai thao tac</div>
+                <div class="history-dashboard__value"><%= auditLogs.availableActions.length %></div>
+              </div>
+            </div>
+
+            <form class="history-filters" method="get" action="/History/">
+              <label class="history-field history-field--grow">
+                <span class="history-field__label">Tìm kiếm</span>
+                <input class="form-control m-input" type="text" name="generalSearch" value="<%= filters.generalSearch %>" placeholder="User, mô tả, module, path, entity...">
+              </label>
+
+              <label class="history-field">
+                <span class="history-field__label">Module</span>
+                <select class="form-control m-input" name="moduleName">
+                  <option value="">Tất cả</option>
+                  <% auditLogs.availableModules.forEach((moduleName) => { %>
+                    <option value="<%= moduleName %>" <%= filters.moduleName === moduleName ? "selected" : "" %>><%= moduleName %></option>
+                  <% }) %>
+                </select>
+              </label>
+
+              <label class="history-field">
+                <span class="history-field__label">Thao tac</span>
+                <select class="form-control m-input" name="actionType">
+                  <option value="">Tất cả</option>
+                  <% auditLogs.availableActions.forEach((actionType) => { %>
+                    <option value="<%= actionType %>" <%= filters.actionType === actionType ? "selected" : "" %>><%= actionType %></option>
+                  <% }) %>
+                </select>
+              </label>
+
+              <label class="history-field">
+                <span class="history-field__label">Tài khoản</span>
+                <input class="form-control m-input" type="text" name="actorUsername" value="<%= filters.actorUsername %>" placeholder="username">
+              </label>
+
+              <label class="history-field">
+                <span class="history-field__label">Cửa hàng</span>
+                <select class="form-control m-input" name="shopId">
+                  <option value="0">Tất cả</option>
+                  <% shopOptions.forEach((shop) => { %>
+                    <option value="<%= shop.id %>" <%= Number(filters.shopId || 0) === shop.id ? "selected" : "" %>><%= shop.name %></option>
+                  <% }) %>
+                </select>
+              </label>
+
+              <label class="history-field">
+                <span class="history-field__label">Từ ngày</span>
+                <input class="form-control m-input" type="date" name="fromDate" value="<%= filters.fromDate %>">
+              </label>
+
+              <label class="history-field">
+                <span class="history-field__label">Đến ngày</span>
+                <input class="form-control m-input" type="date" name="toDate" value="<%= filters.toDate %>">
+              </label>
+
+              <label class="history-field history-field--small">
+                <span class="history-field__label">Mỗi trang</span>
+                <select class="form-control m-input" name="perPage">
+                  <% [25, 50, 100, 200].forEach((perPage) => { %>
+                    <option value="<%= perPage %>" <%= Number(filters.perPage || 50) === perPage ? "selected" : "" %>><%= perPage %></option>
+                  <% }) %>
+                </select>
+              </label>
+
+              <div class="history-filters__actions">
+                <button class="btn btn-accent" type="submit">Lọc dữ liệu</button>
+                <a class="btn btn-info" href="<%= exportHistoryUrl %>">Xuất Excel</a>
+                <a class="btn btn-secondary" href="/History/">Đặt lại</a>
+              </div>
+            </form>
+
+            <div class="history-table-wrap">
+              <table class="table table-bordered table-hover history-table">
+                <thead>
+                  <tr>
+                    <th>Thời gian</th>
+                    <th>Người dùng</th>
+                    <th>Cửa hàng</th>
+                    <th>Module</th>
+                    <th>Thao tác</th>
+                    <th>Nội dung</th>
+                    <th>Path / Entity</th>
+                    <th>IP</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% if (!auditLogs.items.length) { %>
+                    <tr>
+                      <td colspan="8" class="text-center text-muted">Chưa có log nào phù hợp với bộ lọc hiện tại.</td>
+                    </tr>
+                  <% } %>
+
+                  <% auditLogs.items.forEach((item) => { %>
+                    <tr>
+                      <td class="history-table__time">
+                        <div><%= item.createdAt.replace("T", " ") %></div>
+                        <div class="history-table__subtext"><%= item.method || "-" %></div>
+                      </td>
+                      <td>
+                        <div class="history-table__primary"><%= item.actorDisplayName || item.actorUsername || "-" %></div>
+                        <div class="history-table__subtext"><%= item.actorUsername || "-" %> | <%= item.actorRole || "-" %></div>
+                      </td>
+                      <td>
+                        <div class="history-table__primary"><%= item.shopName || "-" %></div>
+                        <div class="history-table__subtext"><%= item.shopId ? `ID ${item.shopId}` : "Không gán shop" %></div>
+                      </td>
+                      <td><span class="history-chip"><%= item.moduleName || "-" %></span></td>
+                      <td>
+                        <span class="history-badge <%= actionClassMap[item.actionType] || 'history-badge--default' %>"><%= item.actionType || "-" %></span>
+                      </td>
+                      <td>
+                        <div class="history-table__primary"><%= item.description || "-" %></div>
+                        <div class="history-table__subtext"><%= item.entityType || "-" %></div>
+                      </td>
+                      <td>
+                        <div class="history-table__primary"><%= item.path || "-" %></div>
+                        <div class="history-table__subtext"><%= item.entityId || "-" %></div>
+                      </td>
+                      <td><%= item.ipAddress || "-" %></td>
+                    </tr>
+                  <% }) %>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="history-footer">
+              <div class="history-footer__meta">
+                Trang <b><%= auditLogs.page %></b> / <b><%= auditLogs.totalPages %></b> - Tổng <b><%= auditLogs.total %></b> bản ghi
+              </div>
+              <div class="history-pagination">
+                <% if (auditLogs.page > 1) { %>
+                  <a class="history-pagination__item" href="<%= buildPageUrl(auditLogs.page - 1) %>">Trước</a>
+                <% } %>
+                <% for (let page = pageWindowStart; page <= pageWindowEnd; page += 1) { %>
+                  <a class="history-pagination__item <%= page === auditLogs.page ? 'is-active' : '' %>" href="<%= buildPageUrl(page) %>"><%= page %></a>
+                <% } %>
+                <% if (auditLogs.page < auditLogs.totalPages) { %>
+                  <a class="history-pagination__item" href="<%= buildPageUrl(auditLogs.page + 1) %>">Sau</a>
+                <% } %>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%- include("components/flash") %>
+<%- include("components/scripts", { extraScripts, inlineScripts }) %>

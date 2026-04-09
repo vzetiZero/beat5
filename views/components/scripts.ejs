@@ -1,0 +1,11 @@
+<script src="/Template/assets/vendors/base/vendors.bundle.js"></script>
+<script src="/Template/assets/demo/default/base/scripts.bundle.js"></script>
+<script src="/public/app.js"></script>
+<% (extraScripts || []).forEach((src) => { %>
+  <script src="<%= src %>"></script>
+<% }) %>
+<% (inlineScripts || []).forEach((scriptContent) => { %>
+  <script><%- scriptContent %></script>
+<% }) %>
+</body>
+</html>

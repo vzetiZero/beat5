@@ -1,0 +1,21 @@
+node_modules/
+tmp/
+
+# Build output
+dist/
+
+# Runtime data
+data/*.sqlite
+data/*.sqlite-shm
+data/*.sqlite-wal
+
+# Test runtime data
+tmp/test-data/
+tmp/local-auth-check/
+tmp/local-auth-route-check/
+tmp/local-auth-route-check-2/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/

@@ -1,0 +1,172 @@
+[
+    {
+        "code": "32",
+        "name": "An Giang",
+        "unit": "Province/City"
+    },
+    {
+        "code": "02",
+        "name": "Bắc Ninh",
+        "unit": "Province/City"
+    },
+    {
+        "code": "34",
+        "name": "Cà Mau",
+        "unit": "Province/City"
+    },
+    {
+        "code": "07",
+        "name": "Cao Bằng",
+        "unit": "Province/City"
+    },
+    {
+        "code": "33",
+        "name": "Cần Thơ",
+        "unit": "Province/City"
+    },
+    {
+        "code": "21",
+        "name": "Đà Nẵng",
+        "unit": "Province/City"
+    },
+    {
+        "code": "25",
+        "name": "Đắk Lắk",
+        "unit": "Province/City"
+    },
+    {
+        "code": "13",
+        "name": "Điện Biên",
+        "unit": "Province/City"
+    },
+    {
+        "code": "28",
+        "name": "Đồng Nai",
+        "unit": "Province/City"
+    },
+    {
+        "code": "31",
+        "name": "Đồng Tháp",
+        "unit": "Province/City"
+    },
+    {
+        "code": "24",
+        "name": "Gia Lai",
+        "unit": "Province/City"
+    },
+    {
+        "code": "01",
+        "name": "Hà Nội",
+        "unit": "Province/City"
+    },
+    {
+        "code": "18",
+        "name": "Hà Tĩnh",
+        "unit": "Province/City"
+    },
+    {
+        "code": "04",
+        "name": "Hải Phòng",
+        "unit": "Province/City"
+    },
+    {
+        "code": "29",
+        "name": "Hồ Chí Minh",
+        "unit": "Province/City"
+    },
+    {
+        "code": "20",
+        "name": "Huế",
+        "unit": "Province/City"
+    },
+    {
+        "code": "05",
+        "name": "Hưng Yên",
+        "unit": "Province/City"
+    },
+    {
+        "code": "23",
+        "name": "Khánh Hòa",
+        "unit": "Province/City"
+    },
+    {
+        "code": "14",
+        "name": "Lai Châu",
+        "unit": "Province/City"
+    },
+    {
+        "code": "11",
+        "name": "Lạng Sơn",
+        "unit": "Province/City"
+    },
+    {
+        "code": "09",
+        "name": "Lào Cai",
+        "unit": "Province/City"
+    },
+    {
+        "code": "26",
+        "name": "Lâm Đồng",
+        "unit": "Province/City"
+    },
+    {
+        "code": "17",
+        "name": "Nghệ An",
+        "unit": "Province/City"
+    },
+    {
+        "code": "06",
+        "name": "Ninh Bình",
+        "unit": "Province/City"
+    },
+    {
+        "code": "12",
+        "name": "Phú Thọ",
+        "unit": "Province/City"
+    },
+    {
+        "code": "22",
+        "name": "Quảng Ngãi",
+        "unit": "Province/City"
+    },
+    {
+        "code": "03",
+        "name": "Quảng Ninh",
+        "unit": "Province/City"
+    },
+    {
+        "code": "19",
+        "name": "Quảng Trị",
+        "unit": "Province/City"
+    },
+    {
+        "code": "15",
+        "name": "Sơn La",
+        "unit": "Province/City"
+    },
+    {
+        "code": "27",
+        "name": "Tây Ninh",
+        "unit": "Province/City"
+    },
+    {
+        "code": "10",
+        "name": "Thái Nguyên",
+        "unit": "Province/City"
+    },
+    {
+        "code": "16",
+        "name": "Thanh Hóa",
+        "unit": "Province/City"
+    },
+    {
+        "code": "08",
+        "name": "Tuyên Quang",
+        "unit": "Province/City"
+    },
+    {
+        "code": "30",
+        "name": "Vĩnh Long",
+        "unit": "Province/City"
+    }
+]

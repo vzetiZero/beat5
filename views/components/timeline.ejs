@@ -1,0 +1,31 @@
+<div class="m-portlet">
+  <div class="m-portlet__head">
+    <div class="m-portlet__head-caption">
+      <div class="m-portlet__head-title">
+        <h3 class="m-portlet__head-text"><%= title || "D&ograve;ng th&#7901;i gian" %></h3>
+      </div>
+    </div>
+  </div>
+  <div class="m-portlet__body">
+    <% if (!items || !items.length) { %>
+      <div class="app-empty"><%= emptyText || "Kh&ocirc;ng c&oacute; d&#7919; li&#7879;u." %></div>
+    <% } else { %>
+      <ul class="app-timeline-list">
+        <% items.forEach((item) => { %>
+          <li>
+            <div><strong><%= item.title || item.label || item.customerRef || item.description || "B&#7843;n ghi" %></strong></div>
+            <% if (item.time || item.createdAt) { %>
+              <div class="text-muted"><%= item.time || item.createdAt %></div>
+            <% } %>
+            <% if (item.description && (item.title || item.label || item.customerRef) !== item.description) { %>
+              <div><%= item.description %></div>
+            <% } %>
+            <% if (showMoney && (item.amount !== undefined || item.money !== undefined)) { %>
+              <div class="m--font-brand"><%= Number(item.amount ?? item.money ?? 0).toLocaleString("vi-VN") %></div>
+            <% } %>
+          </li>
+        <% }) %>
+      </ul>
+    <% } %>
+  </div>
+</div>

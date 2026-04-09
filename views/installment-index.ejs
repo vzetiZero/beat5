@@ -1,0 +1,220 @@
+﻿<%- include("components/head", { pageTitle, extraStyles }) %>
+
+<div class="m-grid m-grid--hor m-grid--root m-page">
+  <%- include("components/header") %>
+  <div class="m-grid__item m-grid__item--fluid m-grid m-grid--ver-desktop m-grid--desktop m-body">
+    <%- include("components/sidebar", { navItems, activePath }) %>
+    <div class="m-grid__item m-grid__item--fluid m-wrapper">
+      <%- include("components/auth-context") %>
+      <%- include("components/subheader", { title: "Trả góp", subtitle: "Danh sách nội bộ, thống kê tổng quan, nhập Excel và quản lý hợp đồng" }) %>
+
+      <div class="m-content">
+        <div class="m-portlet installment-page">
+          <div class="m-portlet__body">
+            <div class="installment-dashboard" id="dashboardCards">
+              <div class="installment-dashboard__card">
+                <div class="installment-dashboard__label">Tổng hợp đồng</div>
+                <div class="installment-dashboard__value" id="dashboardTotalContracts"><%= bootstrap.dashboard.totalContracts %></div>
+              </div>
+              <div class="installment-dashboard__card">
+                <div class="installment-dashboard__label">Tổng gói vay</div>
+                <div class="installment-dashboard__value" id="dashboardLoanPackage"><%= Number(bootstrap.dashboard.totalLoanPackage || 0).toLocaleString("vi-VN") %> ₫</div>
+              </div>
+              <div class="installment-dashboard__card">
+                <div class="installment-dashboard__label">Tổng doanh thu</div>
+                <div class="installment-dashboard__value" id="dashboardRevenue"><%= Number(bootstrap.dashboard.totalRevenue || 0).toLocaleString("vi-VN") %> ₫</div>
+              </div>
+              <div class="installment-dashboard__card">
+                <div class="installment-dashboard__label">Tổng thực chi</div>
+                <div class="installment-dashboard__value" id="dashboardNet"><%= Number(bootstrap.dashboard.totalNetDisbursement || 0).toLocaleString("vi-VN") %> ₫</div>
+              </div>
+              <div class="installment-dashboard__card">
+                <div class="installment-dashboard__label">Đến hạn hôm nay</div>
+                <div class="installment-dashboard__value" id="dashboardDueToday"><%= bootstrap.dashboard.dueTodayCount %></div>
+              </div>
+              <div class="installment-dashboard__card">
+                <div class="installment-dashboard__label">Sắp đến hạn</div>
+                <div class="installment-dashboard__value" id="dashboardDueSoon"><%= bootstrap.dashboard.dueSoonCount || 0 %></div>
+              </div>
+              <div class="installment-dashboard__card">
+                <div class="installment-dashboard__label">Quá hạn</div>
+                <div class="installment-dashboard__value" id="dashboardOverdue"><%= bootstrap.dashboard.overdueCount || 0 %></div>
+              </div>
+              <div class="installment-dashboard__card">
+                <div class="installment-dashboard__label">Số ngày trung bình</div>
+                <div class="installment-dashboard__value" id="dashboardAverageDays"><%= Math.round(bootstrap.dashboard.averageLoanDays || 0) %></div>
+              </div>
+            </div>
+
+            <div class="installment-toolbar">
+              <div class="installment-toolbar__group installment-toolbar__group--grow">
+                <div class="installment-quick-filters" id="dueQuickFilters">
+                  <button class="btn btn-sm btn-outline-secondary is-active" type="button" data-due-filter="">Tất cả</button>
+                  <button class="btn btn-sm btn-outline-secondary" type="button" data-due-filter="due_soon">Sắp đến hạn</button>
+                  <button class="btn btn-sm btn-outline-secondary" type="button" data-due-filter="due_today">Đến hạn hôm nay</button>
+                  <button class="btn btn-sm btn-outline-secondary" type="button" data-due-filter="overdue">Quá hạn</button>
+                </div>
+
+                <label class="installment-field">
+                  <span class="installment-field__label">Tìm kiếm</span>
+                  <input id="generalSearch" class="form-control m-input" type="text" placeholder="Mã KH, tên khách, IMEI, ghi chú, MC...">
+                </label>
+
+                <label class="installment-field">
+                  <span class="installment-field__label">Cửa hàng</span>
+                  <select id="shopFilter" class="form-control m-input" <%= canSelectShop ? '' : 'disabled' %>>
+                    <option value="0">Tất cả</option>
+                    <% shopOptions.forEach((shop) => { %>
+                      <option value="<%= shop.id %>" <%= defaultShopId === shop.id ? 'selected' : '' %>><%= shop.name %></option>
+                    <% }) %>
+                  </select>
+                </label>
+
+                <label class="installment-field">
+                  <span class="installment-field__label">Tình trạng</span>
+                  <select id="statusFilter" class="form-control m-input">
+                    <option value="0">Tất cả</option>
+                    <% bootstrap.availableStatuses.forEach((status) => { %>
+                      <option value="<%= status.code %>"><%= status.label %></option>
+                    <% }) %>
+                  </select>
+                </label>
+
+                <label class="installment-field">
+                  <span class="installment-field__label">Từ ngày</span>
+                  <input id="fromDate" class="form-control m-input" type="date">
+                </label>
+
+                <label class="installment-field">
+                  <span class="installment-field__label">Đến ngày</span>
+                  <input id="toDate" class="form-control m-input" type="date">
+                </label>
+
+                <label class="installment-field">
+                  <span class="installment-field__label">Số ngày</span>
+                  <select id="loanTimeFilter" class="form-control m-input">
+                    <option value="0">Tất cả</option>
+                    <% bootstrap.availableLoanDays.forEach((loanDay) => { %>
+                      <option value="<%= loanDay %>"><%= loanDay %> ngày</option>
+                    <% }) %>
+                  </select>
+                </label>
+
+                <label class="installment-field installment-field--small">
+                  <span class="installment-field__label">Mỗi trang</span>
+                  <select id="perPageFilter" class="form-control m-input">
+                    <option value="25">25</option>
+                    <option value="50" selected>50</option>
+                    <option value="100">100</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="installment-toolbar__group">
+                <% if (canSelectShop) { %>
+                  <button id="btnViewAllShops" class="btn btn-outline-secondary" type="button">Xem tất cả</button>
+                <% } %>
+                <% if (canCreateInstallment) { %>
+                  <a id="btnCreateInstallment" href="/Installment/Create" class="btn btn-accent">Thêm mới</a>
+                <% } %>
+                <button id="btnReloadData" class="btn btn-secondary" type="button">Lấy dữ liệu</button>
+                <% if (canImportInstallment) { %>
+                  <button id="btnImportExcel" class="btn btn-brand" type="button">Nhập Excel</button>
+                <% } %>
+                <input id="excelFileInput" type="file" accept=".xlsx,.xls,.csv" hidden>
+              </div>
+            </div>
+
+            <div class="installment-status-summary" id="statusSummary">
+              <% bootstrap.statusSummary.forEach((item) => { %>
+                <span class="installment-status-pill"><%= item.statusText %>: <b><%= item.count %></b></span>
+              <% }) %>
+            </div>
+
+            <div class="installment-summary" id="summaryCards">
+              <div class="installment-summary__card">
+                <div class="installment-summary__label">Số dòng lọc</div>
+                <div class="installment-summary__value" id="summaryCount">0</div>
+              </div>
+              <div class="installment-summary__card">
+                <div class="installment-summary__label">Doanh thu</div>
+                <div class="installment-summary__value" id="summaryRevenue">0 ₫</div>
+              </div>
+              <div class="installment-summary__card">
+                <div class="installment-summary__label">Thực chi</div>
+                <div class="installment-summary__value" id="summaryNet">0 ₫</div>
+              </div>
+              <div class="installment-summary__card">
+                <div class="installment-summary__label">Đóng trước</div>
+                <div class="installment-summary__value" id="summaryPaidBefore">0 ₫</div>
+              </div>
+              <div class="installment-summary__card">
+                <div class="installment-summary__label">Tiền đóng</div>
+                <div class="installment-summary__value" id="summaryInstallment">0 ₫</div>
+              </div>
+            </div>
+
+            <div class="app-bulk-actions">
+              <div id="installmentSelectedInfo" class="app-table__selection">Đã chọn 0 dòng</div>
+              <div class="app-bulk-actions__buttons">
+                <button id="btnInstallmentBulkStatus" class="btn btn-secondary" type="button">Đổi trạng thái</button>
+                <button id="btnInstallmentExport" class="btn btn-info" type="button">Export CSV</button>
+                <% if (canDeleteInstallment) { %>
+                  <button id="btnInstallmentBulkDelete" class="btn btn-danger" type="button">Xóa đã chọn</button>
+                <% } %>
+              </div>
+            </div>
+
+            <div class="installment-table-wrap">
+              <table class="table table-bordered table-hover installment-table">
+                <thead>
+                  <tr>
+                    <th class="app-table__select-head">
+                      <input id="installmentSelectAll" class="app-table__checkbox" type="checkbox" aria-label="Chọn tất cả">
+                    </th>
+                    <th data-sort="loanDate">Ngày</th>
+                    <th data-sort="customerRef">Mã KH- Tên_ Đời Máy</th>
+                    <th data-sort="loanPackage" class="text-right">Gói Vay</th>
+                    <th data-sort="revenue" class="text-right">Doanh thu</th>
+                    <th data-sort="paymentDay" class="text-center">Ngày Đóng Trước</th>
+                    <th data-sort="loanDays" class="text-center">Số ngày</th>
+                  </tr>
+                </thead>
+                <tbody id="installmentTableBody">
+                  <tr>
+                    <td colspan="7" class="text-center text-muted">Đang tải dữ liệu...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="installment-footer">
+              <div>
+                <div id="tableMeta" class="installment-footer__meta"></div>
+              </div>
+              <div id="pagination" class="installment-pagination"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%- include("components/flash") %>
+<script>
+  window.__INSTALLMENT_PAGE__ = {
+    listUrl: "/installment/api/list",
+    importUrl: "/installment/api/import",
+    deleteUrlBase: "/installment/api",
+    bulkDeleteUrl: "/installment/api/bulk-delete",
+    bulkStatusUrl: "/installment/api/bulk-status",
+    progressUrlBase: "/installment/api/progress",
+    defaultShopId: <%= defaultShopId %>,
+    contextShopId: <%= currentUser && currentUser.shopId ? currentUser.shopId : 0 %>,
+    canSelectShop: <%= canSelectShop ? 'true' : 'false' %>,
+    canDeleteInstallment: <%= canDeleteInstallment ? 'true' : 'false' %>,
+    canImportInstallment: <%= canImportInstallment ? 'true' : 'false' %>
+  };
+</script>
+<%- include("components/scripts", { extraScripts, inlineScripts }) %>

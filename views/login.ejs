@@ -1,0 +1,271 @@
+<%- include("components/head", { pageTitle, extraStyles: [] }) %>
+
+<%
+  const flashMessage = locals.flash || null;
+  const isLoginError = flashMessage && flashMessage.type === "error";
+  const isLoginWarning = flashMessage && flashMessage.type === "warning";
+  const isLoginSuccessToast = flashMessage && flashMessage.type === "success" && flashMessage.mode === "toast";
+  const rememberedUsername = flashMessage && typeof flashMessage.username === "string" ? flashMessage.username : "";
+%>
+
+<div class="m-grid m-grid--hor m-grid--root m-page app-login-page">
+  <div
+    id="m_login"
+    class="m-grid__item m-grid__item--fluid m-grid m-grid--hor m-login m-login--signin m-login--2 m-login-2--skin-2"
+    style="background: linear-gradient(135deg, #eef3fb 0%, #dfe9f7 45%, #f8fbff 100%);"
+  >
+    <div class="m-grid__item m-grid__item--fluid m-login__wrapper">
+      <div class="m-login__container app-login__card" style="max-width: 430px;">
+        <div class="m-login__signin">
+          <div class="m-login__head">
+            <h3 class="m-login__title">Đăng nhập vào hệ thống</h3>
+            <div class="app-login__subtitle">Xác thực trực tiếp với 2gold.biz</div>
+          </div>
+
+          <% if (isLoginError) { %>
+            <div class="alert alert-danger fade show app-login__alert" role="alert">
+              <strong><%= flashMessage.title || "Đăng nhập thất bại" %></strong>
+              <div style="margin-top: 4px;"><%= flashMessage.text || "Tài khoản hoặc mật khẩu không đúng." %></div>
+            </div>
+          <% } %>
+
+          <% if (isLoginWarning) { %>
+            <div class="alert alert-warning fade show app-login__alert" role="alert">
+              <strong><%= flashMessage.title || "Cần chú ý" %></strong>
+              <div style="margin-top: 4px;"><%= flashMessage.text || "" %></div>
+            </div>
+          <% } %>
+
+          <form id="loginForm" class="m-login__form m-form" action="/login" method="post" novalidate>
+            <div class="form-group m-form__group">
+              <input
+                id="loginUsername"
+                class="form-control m-input app-login__input"
+                type="text"
+                placeholder="Tên đăng nhập"
+                name="Username"
+                autocomplete="username"
+                value="<%= rememberedUsername %>"
+                required
+              >
+              <div class="invalid-feedback app-login__feedback">Vui lòng nhập tên đăng nhập.</div>
+            </div>
+
+            <div class="form-group m-form__group">
+              <div class="app-login__password-group">
+                <input
+                  id="loginPassword"
+                  class="form-control m-input app-login__input app-login__password-input"
+                  type="password"
+                  placeholder="Mật khẩu"
+                  name="Password"
+                  autocomplete="current-password"
+                  required
+                >
+                <button
+                  id="togglePasswordBtn"
+                  class="app-login__toggle-password"
+                  type="button"
+                  aria-label="Hiện mật khẩu"
+                  aria-pressed="false"
+                >
+                  <svg id="togglePasswordOpen" class="app-login__eye-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 5C6.5 5 2.1 8.4 1 12c1.1 3.6 5.5 7 11 7s9.9-3.4 11-7c-1.1-3.6-5.5-7-11-7Zm0 11.2A4.2 4.2 0 1 1 12 7.8a4.2 4.2 0 0 1 0 8.4Zm0-6.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 0 0 0-4.8Z"/>
+                  </svg>
+                  <svg id="togglePasswordClosed" class="app-login__eye-icon" viewBox="0 0 24 24" aria-hidden="true" style="display:none;">
+                    <path d="m3.3 2 18.7 18.7-1.3 1.3-3.1-3.1A12.7 12.7 0 0 1 12 20c-5.5 0-9.9-3.4-11-7A11.8 11.8 0 0 1 5.4 7L2 3.3 3.3 2Zm5 7.6a4.2 4.2 0 0 0 6.1 5.8l-1.6-1.6a2.4 2.4 0 0 1-3-3l-1.5-1.2Zm3.6-4.6c5.5 0 9.9 3.4 11 7a11.7 11.7 0 0 1-3.7 5.2l-1.4-1.4A9.9 9.9 0 0 0 21 12c-1.1-3-4.8-5.2-9-5.2-1.3 0-2.5.2-3.6.6L7 6A12.2 12.2 0 0 1 11.9 5Z"/>
+                  </svg>
+                </button>
+              </div>
+              <div id="loginPasswordError" class="invalid-feedback app-login__feedback">Vui lòng nhập mật khẩu.</div>
+            </div>
+
+            <div class="row m-login__form-sub">
+              <div class="col m--align-left m-login__form-left">
+                <label class="m-checkbox m-checkbox--focus">
+                  <input type="checkbox" name="Remember">
+                  Ghi nhớ đăng nhập
+                  <span></span>
+                </label>
+              </div>
+            </div>
+
+            <div class="m-login__form-action">
+              <button
+                id="m_login_signin_submit"
+                class="btn btn-mecash m-btn m-btn--pill m-btn--custom m-btn--air m-login__btn m-login__btn--primary"
+                type="submit"
+              >
+                Đăng nhập
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .app-login-page .app-login__card {
+    background: rgba(255, 255, 255, 0.96);
+    border: 1px solid rgba(209, 218, 233, 0.9);
+    border-radius: 22px;
+    box-shadow: 0 24px 60px rgba(44, 62, 92, 0.16);
+    padding: 28px 28px 24px;
+  }
+
+  .app-login-page .app-login__alert {
+    border-radius: 14px;
+    margin-bottom: 18px;
+  }
+
+  .app-login-page .app-login__input {
+    background: #fff !important;
+    border: 1px solid #d7deea !important;
+    border-radius: 14px !important;
+    box-sizing: border-box !important;
+    min-height: 48px !important;
+    padding: 0 16px !important;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+    width: 100% !important;
+  }
+
+  .app-login-page .app-login__input:focus {
+    border-color: #5b78ff !important;
+    box-shadow: 0 0 0 0.2rem rgba(91, 120, 255, 0.15) !important;
+  }
+
+  .app-login-page .app-login__password-group {
+    position: relative;
+  }
+
+  .app-login-page .app-login__password-input {
+    padding-right: 56px !important;
+  }
+
+  .app-login-page .app-login__toggle-password {
+    align-items: center !important;
+    appearance: none !important;
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    color: #5f6b85 !important;
+    cursor: pointer !important;
+    display: inline-flex !important;
+    height: 36px !important;
+    justify-content: center !important;
+    margin: 0 !important;
+    min-width: 36px !important;
+    padding: 0 !important;
+    position: absolute !important;
+    right: 10px !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    width: 36px !important;
+    z-index: 5 !important;
+  }
+
+  .app-login-page .app-login__toggle-password:hover,
+  .app-login-page .app-login__toggle-password:focus {
+    background: rgba(91, 120, 255, 0.08) !important;
+    border-radius: 999px !important;
+    color: #344054 !important;
+    outline: none !important;
+  }
+
+  .app-login-page .app-login__eye-icon {
+    fill: currentColor;
+    height: 20px;
+    pointer-events: none;
+    width: 20px;
+  }
+
+  .app-login-page .app-login__input.is-invalid {
+    background-image: none !important;
+    border-color: #f4516c !important;
+    box-shadow: 0 0 0 0.18rem rgba(244, 81, 108, 0.14) !important;
+  }
+
+  .app-login-page .app-login__password-group.is-invalid .app-login__password-input {
+    border-color: #f4516c !important;
+  }
+
+  .app-login-page .app-login__feedback {
+    color: #f4516c;
+    font-size: 12px;
+    font-weight: 600;
+    margin-top: 6px;
+  }
+</style>
+
+<script>
+  (function () {
+    var form = document.getElementById("loginForm");
+    var usernameInput = document.getElementById("loginUsername");
+    var passwordInput = document.getElementById("loginPassword");
+    var togglePasswordBtn = document.getElementById("togglePasswordBtn");
+    var togglePasswordOpen = document.getElementById("togglePasswordOpen");
+    var togglePasswordClosed = document.getElementById("togglePasswordClosed");
+    var passwordError = document.getElementById("loginPasswordError");
+    var passwordGroup = document.querySelector(".app-login__password-group");
+
+    if (!form || !usernameInput || !passwordInput || !togglePasswordBtn || !togglePasswordOpen || !togglePasswordClosed || !passwordError || !passwordGroup) {
+      return;
+    }
+
+    function syncPasswordToggle() {
+      var isVisible = passwordInput.type === "text";
+      togglePasswordOpen.style.display = isVisible ? "none" : "block";
+      togglePasswordClosed.style.display = isVisible ? "block" : "none";
+      togglePasswordBtn.setAttribute("aria-label", isVisible ? "Ẩn mật khẩu" : "Hiện mật khẩu");
+      togglePasswordBtn.setAttribute("aria-pressed", isVisible ? "true" : "false");
+    }
+
+    function validateUsername() {
+      var isValid = Boolean(usernameInput.value.trim());
+      usernameInput.classList.toggle("is-invalid", !isValid);
+      return isValid;
+    }
+
+    function validatePassword() {
+      var isValid = Boolean(passwordInput.value.trim());
+      passwordInput.classList.toggle("is-invalid", !isValid);
+      passwordGroup.classList.toggle("is-invalid", !isValid);
+      passwordError.style.display = isValid ? "none" : "block";
+      return isValid;
+    }
+
+    togglePasswordBtn.addEventListener("click", function () {
+      passwordInput.type = passwordInput.type === "password" ? "text" : "password";
+      syncPasswordToggle();
+      passwordInput.focus();
+    });
+
+    usernameInput.addEventListener("input", validateUsername);
+    passwordInput.addEventListener("input", validatePassword);
+
+    form.addEventListener("submit", function (event) {
+      var usernameValid = validateUsername();
+      var passwordValid = validatePassword();
+      if (!usernameValid || !passwordValid) {
+        event.preventDefault();
+      }
+    });
+
+    syncPasswordToggle();
+  })();
+</script>
+
+<% if (isLoginSuccessToast) { %>
+  <script>
+    window.__FLASH__ = <%- JSON.stringify({
+      type: flashMessage.type || "success",
+      title: flashMessage.title || "Đăng xuất thành công",
+      text: flashMessage.text || "Bạn đã đăng xuất khỏi hệ thống.",
+      mode: "toast"
+    }) %>;
+  </script>
+<% } %>
+
+<%- include("components/scripts", { extraScripts: [], inlineScripts: [] }) %>
