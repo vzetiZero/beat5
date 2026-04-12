@@ -1,4 +1,4 @@
-import path from "node:path";
+﻿import path from "node:path";
 
 import express, { Request, Response } from "express";
 import session from "express-session";
@@ -33,7 +33,9 @@ import {
   saveInstallment,
   transferInstallmentsInstallerNames,
   transferInstallmentsToShop,
+  previewInstallment,
   updateInstallmentCollectionProgress,
+  updateInstallmentNextPaymentDay,
   updateInstallmentStatus
 } from "./services/installment-store";
 import { listProvinceOptions, listWardOptionsByProvinceCode } from "./services/localities";
@@ -77,6 +79,7 @@ import { addTrashItem, getTrashItemById, listTrashItems, markTrashItemRestored }
 const API_ORIGIN = "https://api.2gold.biz";
 const FILE_ORIGIN = "https://api.2gold.biz/FileUpload";
 const SITE_ORIGIN = "https://2gold.biz";
+const INSTALLMENT_VIEW_ONLY_MODE = false;
 const upload = multer({ storage: multer.memoryStorage() });
 const UTF8_CONTENT_TYPE_PREFIXES = [
   "text/",
@@ -290,6 +293,61 @@ function parseIdList(value: unknown): number[] {
 function parseBooleanFlag(value: unknown): boolean {
   const normalized = String(value ?? "").trim().toLowerCase();
   return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
+
+function buildInstallmentPopupPayload(
+  source: Record<string, unknown>,
+  shopId: number,
+  fallback?: Record<string, unknown>
+) {
+  const fallbackSource = fallback || {};
+  const loanPackage = parseOptionalNumber(source.loanPackage) ?? parseOptionalNumber(fallbackSource.loanPackage) ?? 0;
+  const revenue = parseOptionalNumber(source.revenue) ?? parseOptionalNumber(fallbackSource.revenue) ?? 0;
+
+  return {
+    stt:
+      parseOptionalNumber(source.stt) ??
+      parseOptionalNumber(source.codeId) ??
+      parseOptionalNumber(fallbackSource.stt) ??
+      null,
+    shopId,
+    customerRef: normalizeLooseText(source.customerRef ?? source.customerName ?? fallbackSource.customerRef ?? ""),
+    imei: normalizeLooseText(source.imei ?? fallbackSource.imei ?? ""),
+    loanDate: normalizeLooseText(source.loanDate ?? fallbackSource.loanDate ?? ""),
+    loanPackage,
+    revenue,
+    setupFee: parseOptionalNumber(source.setupFee) ?? parseOptionalNumber(fallbackSource.setupFee) ?? 0,
+    netDisbursement:
+      parseOptionalNumber(source.netDisbursement) ??
+      parseOptionalNumber(fallbackSource.netDisbursement) ??
+      loanPackage,
+    paidBefore: parseOptionalNumber(source.paidBefore) ?? parseOptionalNumber(fallbackSource.paidBefore) ?? 0,
+    paymentDay: normalizeLooseText(source.paymentDay ?? fallbackSource.paymentDay ?? ""),
+    loanDays: parseOptionalNumber(source.loanDays) ?? parseOptionalNumber(fallbackSource.loanDays) ?? null,
+    collectionIntervalDays:
+      parseOptionalNumber(source.collectionIntervalDays) ??
+      parseOptionalNumber(fallbackSource.collectionIntervalDays) ??
+      1,
+    installmentAmount:
+      parseOptionalNumber(source.installmentAmount) ??
+      parseOptionalNumber(fallbackSource.installmentAmount) ??
+      0,
+    note: normalizeLooseText(source.note ?? fallbackSource.note ?? ""),
+    installerName: normalizeLooseText(source.installerName ?? fallbackSource.installerName ?? ""),
+    referralFee: parseOptionalNumber(source.referralFee) ?? parseOptionalNumber(fallbackSource.referralFee) ?? 0,
+    mc: normalizeLooseText(source.mc ?? fallbackSource.mc ?? ""),
+    statusCode:
+      parseOptionalNumber(source.statusCode) ??
+      parseOptionalNumber(fallbackSource.statusCode) ??
+      0,
+    statusText: normalizeLooseText(source.statusText ?? fallbackSource.statusText ?? "Mới tạo"),
+    paymentMethod: normalizeLooseText(source.paymentMethod ?? fallbackSource.paymentMethod ?? "periodic") || "periodic",
+    collectInAdvance: parseBooleanFlag(source.collectInAdvance ?? fallbackSource.collectInAdvance),
+    prepaidPeriodCount:
+      parseOptionalNumber(source.prepaidPeriodCount) ??
+      parseOptionalNumber(fallbackSource.prepaidPeriodCount) ??
+      0
+  };
 }
 
 function normalizeLooseText(value: unknown): string {
@@ -647,7 +705,7 @@ export function createApp() {
       }
 
     res.render("login", {
-      pageTitle: "Đăng nhập vào hệ thống"
+      pageTitle: "??ng nh?p v?o h? th?ng"
     });
   });
 
@@ -659,12 +717,12 @@ export function createApp() {
       const localStaff = findLocalStaffByUsername(username);
       if (localStaff) {
         if (localStaff.status !== 1) {
-          throw new Error("Tài khoản nhân viên đã bị khóa.");
+          throw new Error("T?i kho?n nh?n vi?n ?? b? kh?a.");
         }
 
         const localAuth = authenticateLocalStaffLogin(username, password);
         if (!localAuth) {
-          throw new Error("Sai tài khoản hoặc mật khẩu nhân viên.");
+          throw new Error("Sai t?i kho?n ho?c m?t kh?u nh?n vi?n.");
         }
 
         const { user } = localAuth;
@@ -691,8 +749,8 @@ export function createApp() {
         });
         req.session.flash = {
           type: "success",
-          title: "Đăng nhập thành công",
-          text: "Nhân viên đã được xác thực nội bộ.",
+          title: "??ng nh?p th?nh c?ng",
+          text: "Nh?n vi?n ?? ???c x?c th?c n?i b?.",
           mode: "login-success",
           confirmButtonText: "Tiếp tục",
           timer: 2500
@@ -724,7 +782,7 @@ export function createApp() {
       });
       req.session.flash = {
         type: "success",
-        title: "Đăng nhập thành công",
+        title: "??ng nh?p th?nh c?ng",
         text: message,
         mode: "login-success",
         confirmButtonText: "Tiếp tục",
@@ -749,8 +807,8 @@ export function createApp() {
       });
       req.session.flash = {
         type: "error",
-        title: "Đăng nhập thất bại",
-        text: error instanceof Error ? error.message : "Không thể đăng nhập vào 2gold.biz",
+        title: "??ng nh?p th?t b?i",
+        text: error instanceof Error ? error.message : "Kh?ng th? ??ng nh?p v?o 2gold.biz",
         mode: "modal",
         username
       };
@@ -772,8 +830,8 @@ export function createApp() {
     removeOnlineSession(req.sessionID);
     req.session.flash = {
       type: "success",
-      title: "Đăng xuất thành công",
-      text: "Bạn đã đăng xuất khỏi hệ thống.",
+      title: "??ng xu?t th?nh c?ng",
+      text: "B?n ?? ??ng xu?t kh?i h? th?ng.",
       mode: "toast"
     };
     req.session.save(() => {
@@ -790,8 +848,8 @@ export function createApp() {
     if (!nextShopId || !canAccessShop(user, nextShopId)) {
       req.session.flash = {
         type: "error",
-        title: "Không thể chuyển cửa hàng",
-        text: "Cửa hàng được chọn không thuộc phạm vi truy cập của tài khoản.",
+        title: "Kh?ng th? chuy?n c?a h?ng",
+        text: "C?a h?ng ???c ch?n kh?ng thu?c ph?m vi truy c?p c?a t?i kho?n.",
         mode: "modal"
       };
       res.redirect(returnTo);
@@ -821,7 +879,17 @@ export function createApp() {
     res.redirect(returnTo);
   });
 
-  app.get("/Installment/Index/", requireModulePermission("installment"), (req: Request, res: Response) => {
+  function renderInstallmentPage(
+    req: Request,
+    res: Response,
+    options: {
+      activePath: "/Installment/Index/" | "/Calendar/Installment";
+      pageMode: "list" | "calendar";
+      defaultDueStatus?: string;
+      defaultSortColumn?: string;
+      defaultSortDirection?: "asc" | "desc";
+    }
+  ) {
     const user = req.session.user!;
     const canManageAllShops = user.canAccessAllShops || user.role === "admin";
     const repairedLegacyRows = reconcileLegacyInstallmentsForUser(user);
@@ -841,10 +909,16 @@ export function createApp() {
         mode: "toast"
       };
     }
-    logPageAccess(req, "installment", "Truy cap danh sach tra gop", {
+    logPageAccess(
+      req,
+      "installment",
+      options.pageMode === "calendar" ? "Truy cap lich thanh toan tra gop" : "Truy cap danh sach tra gop",
+      {
       shopId: user.shopId
-    });
+      }
+    );
     const bootstrapSource = listInstallments({
+      dueStatus: options.defaultDueStatus || "",
       allowedShopIds: canManageAllShops ? undefined : getAllowedShopIds(user)
     });
     const bootstrap = {
@@ -855,86 +929,55 @@ export function createApp() {
       lastImport: bootstrapSource.lastImport
     };
     const shopOptions = getScopedShopOptions(user);
+    const installerOptions = getInstallerOptions(user);
 
     res.render("installment-index", {
-      pageTitle: "Trả góp",
-      activePath: "/Installment/Index/",
+      pageTitle: options.pageMode === "calendar" ? "Lich thanh toan tra gop" : "Tra gop",
+      activePath: options.activePath,
       navItems: visibleNavItems(user),
       bootstrap,
       shopOptions,
+      installerOptions,
       defaultShopId: canManageAllShops ? 0 : user.shopId,
       canSelectShop: canManageAllShops,
       canCreateInstallment: hasModulePermission(user, "installment"),
       canDeleteInstallment: hasModulePermission(user, "installment"),
       canImportInstallment: hasModulePermission(user, "installment"),
+      installmentPageMode: options.pageMode,
+      defaultDueStatus: options.defaultDueStatus || "",
+      defaultSortColumn: options.defaultSortColumn || "loanDate",
+      defaultSortDirection: options.defaultSortDirection || "desc",
+      installmentViewOnlyMode: INSTALLMENT_VIEW_ONLY_MODE,
+      mockInstallments: [],
       extraStyles: ["/public/installment.css"],
       extraScripts: ["/public/installment.js"],
       inlineScripts: []
     });
+  }
+
+  app.get("/Installment/Index/", requireModulePermission("installment"), (req: Request, res: Response) => {
+    renderInstallmentPage(req, res, {
+      activePath: "/Installment/Index/",
+      pageMode: "list"
+    });
+  });
+
+  app.get("/Calendar/Installment", requireModulePermission("installment"), (req: Request, res: Response) => {
+    renderInstallmentPage(req, res, {
+      activePath: "/Calendar/Installment",
+      pageMode: "calendar",
+      defaultDueStatus: "calendar_due",
+      defaultSortColumn: "paymentDay",
+      defaultSortDirection: "asc"
+    });
   });
 
   app.get("/Installment/Create", requireModulePermission("installment"), (req: Request, res: Response) => {
-    const user = req.session.user!;
-    const canManageAllShops = user.canAccessAllShops || user.role === "admin";
-    const requestedShopId = canManageAllShops ? parseOptionalNumber(req.query.shopId) : user.shopId;
-    const defaultShopId =
-      requestedShopId && requireShopScope(user, requestedShopId) ? requestedShopId : canManageAllShops ? 0 : user.shopId;
-    logPageAccess(req, "installment", "Truy cap form tao moi tra gop", {
-      shopId: user.shopId
-    });
-    res.render("installment-form", {
-      pageTitle: "Thêm mới trả góp",
-      activePath: "/Installment/Create",
-      navItems: visibleNavItems(user),
-      formMode: "create",
-      installment: null,
-      shopOptions: getScopedShopOptions(user),
-      installerOptions: getInstallerOptions(user, user.displayName || user.username),
-      defaultInstallerName: String(user.displayName || user.username || "").trim(),
-      defaultShopId,
-      canSelectShop: canManageAllShops,
-      extraStyles: ["/public/installment.css"],
-      extraScripts: ["/public/installment-form.js"],
-      inlineScripts: []
-    });
+    res.redirect("/Installment/Index/");
   });
 
   app.get("/Installment/Edit/:id", requireModulePermission("installment"), (req: Request, res: Response) => {
-    const user = req.session.user!;
-    const canManageAllShops = user.canAccessAllShops || user.role === "admin";
-    reconcileLegacyInstallmentsForUser(user);
-    const installment = getInstallmentById(Number(req.params.id));
-
-    if (!installment || !requireShopScope(user, installment.shopId)) {
-      req.session.flash = {
-        type: "error",
-        title: "Không tìm thấy",
-        text: "Bản ghi trả góp không tồn tại hoặc bạn không được truy cập.",
-        mode: "modal"
-      };
-      res.redirect("/Installment/Index/");
-      return;
-    }
-
-    logPageAccess(req, "installment", "Truy cap form cap nhat tra gop", {
-      shopId: installment.shopId,
-      shopName: installment.shopName
-    });
-    res.render("installment-form", {
-      pageTitle: "Cập nhật trả góp",
-      activePath: "/Installment/Index/",
-      navItems: visibleNavItems(user),
-      formMode: "edit",
-      installment,
-      shopOptions: getScopedShopOptions(user),
-      installerOptions: getInstallerOptions(user, installment.installerName),
-      defaultInstallerName: String(installment.installerName || user.displayName || user.username || "").trim(),
-      defaultShopId: installment.shopId,
-      canSelectShop: canManageAllShops,
-      extraStyles: ["/public/installment.css"],
-      extraScripts: ["/public/installment-form.js"],
-      inlineScripts: []
-    });
+    res.redirect("/Installment/Index/");
   });
 
   app.post("/Installment/Create", requireModulePermission("installment"), (req: Request, res: Response) => {
@@ -943,7 +986,7 @@ export function createApp() {
       const canManageAllShops = user.canAccessAllShops || user.role === "admin";
       const shopId = canManageAllShops ? parseOptionalNumber(req.body.shopId) : user.shopId;
       if (!shopId || !requireShopScope(user, shopId)) {
-        throw new Error("Bạn không được tạo hợp đồng cho cửa hàng này.");
+        throw new Error("Ban khong duoc tao hop dong cho cua hang nay.");
       }
 
       const created = saveInstallment({
@@ -951,14 +994,14 @@ export function createApp() {
         shopId
       });
       if (!created) {
-        throw new Error("Không thể tạo mới hợp đồng trả góp.");
+        throw new Error("Khong the tao moi hop dong tra gop.");
       }
       safeWriteAuditLogFromRequest(user, req, {
         moduleName: "installment",
         actionType: "create",
         entityType: "installment",
         entityId: created.id,
-        description: `Tạo hợp đồng trả góp ${created.customerRef || created.imei || created.id}`,
+        description: `Tao hop dong tra gop ${created.customerRef || created.imei || created.id}`,
         shopId: created.shopId,
         shopName: created.shopName,
         metadata: {
@@ -969,19 +1012,19 @@ export function createApp() {
       });
       req.session.flash = {
         type: "success",
-        title: "Lưu thành công",
-        text: "Đã tạo mới hợp đồng trả góp.",
+        title: "Luu thanh cong",
+        text: "Da tao moi hop dong tra gop.",
         mode: "toast"
       };
       res.redirect("/Installment/Index/");
     } catch (error) {
       req.session.flash = {
         type: "error",
-        title: "Không thể lưu",
-        text: error instanceof Error ? error.message : "Không thể tạo mới hợp đồng trả góp.",
+        title: "Khong the luu",
+        text: error instanceof Error ? error.message : "Khong the tao moi hop dong tra gop.",
         mode: "modal"
       };
-      res.redirect("/Installment/Create");
+      res.redirect("/Installment/Index/");
     }
   });
 
@@ -992,12 +1035,12 @@ export function createApp() {
       reconcileLegacyInstallmentsForUser(user);
       const existing = getInstallmentById(Number(req.params.id));
       if (!existing || !requireShopScope(user, existing.shopId)) {
-        throw new Error("Bạn không được cập nhật hợp đồng của cửa hàng này.");
+        throw new Error("Ban khong duoc cap nhat hop dong cua cua hang nay.");
       }
 
       const shopId = canManageAllShops ? parseOptionalNumber(req.body.shopId) : existing.shopId;
       if (!shopId || !requireShopScope(user, shopId)) {
-        throw new Error("Bạn không được chuyển hợp đồng sang cửa hàng này.");
+        throw new Error("Ban khong duoc chuyen hop dong sang cua hang nay.");
       }
 
       const updated = saveInstallment(
@@ -1008,14 +1051,14 @@ export function createApp() {
         Number(req.params.id)
       );
       if (!updated) {
-        throw new Error("Không thể cập nhật hợp đồng trả góp.");
+        throw new Error("Khong the cap nhat hop dong tra gop.");
       }
       safeWriteAuditLogFromRequest(user, req, {
         moduleName: "installment",
         actionType: "update",
         entityType: "installment",
         entityId: updated.id,
-        description: `Cập nhật hợp đồng trả góp ${updated.customerRef || updated.imei || updated.id}`,
+        description: `Cap nhat hop dong tra gop ${updated.customerRef || updated.imei || updated.id}`,
         shopId: updated.shopId,
         shopName: updated.shopName,
         metadata: {
@@ -1026,19 +1069,205 @@ export function createApp() {
       });
       req.session.flash = {
         type: "success",
-        title: "Cập nhật thành công",
-        text: "Đã cập nhật hợp đồng trả góp.",
+        title: "Cap nhat thanh cong",
+        text: "Da cap nhat hop dong tra gop.",
         mode: "toast"
       };
       res.redirect("/Installment/Index/");
     } catch (error) {
       req.session.flash = {
         type: "error",
-        title: "Không thể cập nhật",
-        text: error instanceof Error ? error.message : "Không thể cập nhật hợp đồng trả góp.",
+        title: "Khong the cap nhat",
+        text: error instanceof Error ? error.message : "Khong the cap nhat hop dong tra gop.",
         mode: "modal"
       };
-      res.redirect(`/Installment/Edit/${req.params.id}`);
+      res.redirect("/Installment/Index/");
+    }
+  });
+
+  app.get("/installment/api/:id(\\d+)", requireModulePermission("installment"), (req: Request, res: Response) => {
+    try {
+      const user = req.session.user!;
+      reconcileLegacyInstallmentsForUser(user);
+      const installment = getInstallmentById(Number(req.params.id));
+      if (!installment || !requireShopScope(user, installment.shopId)) {
+        res.status(404).json({
+          Result: -1,
+          Message: "Khong tim thay hop dong tra gop."
+        });
+        return;
+      }
+
+      res.json({
+        Result: 1,
+        item: installment
+      });
+    } catch (error) {
+      res.status(400).json({
+        Result: -1,
+        Message: error instanceof Error ? error.message : "Khong the tai hop dong tra gop."
+      });
+    }
+  });
+
+  app.post("/installment/api/preview", requireModulePermission("installment"), (req: Request, res: Response) => {
+    try {
+      const user = req.session.user!;
+      const canManageAllShops = user.canAccessAllShops || user.role === "admin";
+      const requestedShopId = canManageAllShops ? parseOptionalNumber(req.body.shopId) : user.shopId;
+      if (!requestedShopId || !requireShopScope(user, requestedShopId)) {
+        throw new Error("Ban khong duoc xem du lieu cua cua hang nay.");
+      }
+
+      const payload = buildInstallmentPopupPayload(req.body, requestedShopId);
+      const preview = previewInstallment(payload);
+      res.json({
+        Result: 1,
+        item: preview.normalized,
+        summary: preview.summary,
+        schedule: preview.schedule
+      });
+    } catch (error) {
+      res.status(400).json({
+        Result: -1,
+        Message: error instanceof Error ? error.message : "Khong the tinh toan hop dong tra gop."
+      });
+    }
+  });
+
+  app.post("/installment/api", requireModulePermission("installment"), (req: Request, res: Response) => {
+    try {
+      const user = req.session.user!;
+      const canManageAllShops = user.canAccessAllShops || user.role === "admin";
+      const requestedShopId = canManageAllShops ? parseOptionalNumber(req.body.shopId) : user.shopId;
+      if (!requestedShopId || !requireShopScope(user, requestedShopId)) {
+        throw new Error("Ban khong duoc tao hop dong cho cua hang nay.");
+      }
+
+      const payload = buildInstallmentPopupPayload(req.body, requestedShopId, {
+        paymentMethod: "periodic",
+        statusCode: 0,
+        statusText: "Mới tạo",
+        installerName: user.displayName || user.username || ""
+      });
+      const created = saveInstallment(payload);
+      if (!created) {
+        throw new Error("Khong the tao hop dong tra gop.");
+      }
+
+      safeWriteAuditLogFromRequest(user, req, {
+        moduleName: "installment",
+        actionType: "create",
+        entityType: "installment",
+        entityId: created.id,
+        description: `Tao hop dong tra gop ${created.customerRef || created.imei || created.id}`,
+        shopId: created.shopId,
+        shopName: created.shopName,
+        metadata: {
+          customerRef: created.customerRef,
+          imei: created.imei,
+          revenue: created.revenue
+        }
+      });
+
+      res.json({
+        Result: 1,
+        Message: "Da tao moi hop dong tra gop.",
+        item: created
+      });
+    } catch (error) {
+      res.status(400).json({
+        Result: -1,
+        Message: error instanceof Error ? error.message : "Khong the tao hop dong tra gop."
+      });
+    }
+  });
+
+  app.put("/installment/api/:id(\\d+)", requireModulePermission("installment"), (req: Request, res: Response) => {
+    try {
+      const user = req.session.user!;
+      const canManageAllShops = user.canAccessAllShops || user.role === "admin";
+      reconcileLegacyInstallmentsForUser(user);
+      const existing = getInstallmentById(Number(req.params.id));
+      if (!existing || !requireShopScope(user, existing.shopId)) {
+        throw new Error("Ban khong duoc cap nhat hop dong nay.");
+      }
+
+      const requestedShopId = canManageAllShops ? parseOptionalNumber(req.body.shopId) : existing.shopId;
+      if (!requestedShopId || !requireShopScope(user, requestedShopId)) {
+        throw new Error("Ban khong duoc chuyen hop dong sang cua hang nay.");
+      }
+
+      const payload = buildInstallmentPopupPayload(req.body, requestedShopId, existing as unknown as Record<string, unknown>);
+      const updated = saveInstallment(payload, Number(req.params.id));
+      if (!updated) {
+        throw new Error("Khong the cap nhat hop dong tra gop.");
+      }
+
+      safeWriteAuditLogFromRequest(user, req, {
+        moduleName: "installment",
+        actionType: "update",
+        entityType: "installment",
+        entityId: updated.id,
+        description: `Cap nhat hop dong tra gop ${updated.customerRef || updated.imei || updated.id}`,
+        shopId: updated.shopId,
+        shopName: updated.shopName,
+        metadata: {
+          customerRef: updated.customerRef,
+          imei: updated.imei,
+          revenue: updated.revenue
+        }
+      });
+
+      res.json({
+        Result: 1,
+        Message: "Da cap nhat hop dong tra gop.",
+        item: updated
+      });
+    } catch (error) {
+      res.status(400).json({
+        Result: -1,
+        Message: error instanceof Error ? error.message : "Khong the cap nhat hop dong tra gop."
+      });
+    }
+  });
+
+  app.post("/installment/api/:id(\\d+)/next-date", requireModulePermission("installment"), (req: Request, res: Response) => {
+    try {
+      const user = req.session.user!;
+      reconcileLegacyInstallmentsForUser(user);
+      const installment = getInstallmentById(Number(req.params.id));
+      if (!installment || !requireShopScope(user, installment.shopId)) {
+        throw new Error("Ban khong duoc cap nhat hop dong nay.");
+      }
+
+      const updated = updateInstallmentNextPaymentDay(Number(req.params.id), req.body.paymentDay ?? req.body.nextPaymentDay);
+      if (!updated) {
+        throw new Error("Khong the cap nhat ngay dong tiep theo.");
+      }
+      safeWriteAuditLogFromRequest(user, req, {
+        moduleName: "installment",
+        actionType: "update_next_date",
+        entityType: "installment",
+        entityId: updated.id,
+        description: `Cap nhat ngay dong tiep theo cho hop dong ${updated.customerRef || updated.imei || updated.id}`,
+        shopId: updated.shopId,
+        shopName: updated.shopName,
+        metadata: {
+          paymentDay: updated.paymentDay
+        }
+      });
+
+      res.json({
+        Result: 1,
+        Message: "Da cap nhat ngay dong tiep theo.",
+        item: updated
+      });
+    } catch (error) {
+      res.status(400).json({
+        Result: -1,
+        Message: error instanceof Error ? error.message : "Khong the cap nhat ngay dong tiep theo."
+      });
     }
   });
 
@@ -1078,7 +1307,7 @@ export function createApp() {
     } catch (error) {
       res.status(500).json({
         Result: -1,
-        Message: error instanceof Error ? error.message : "Không thể tải danh sách trả góp"
+        Message: error instanceof Error ? error.message : "Khong the tai danh sach tra gop."
       });
     }
   });
@@ -1094,7 +1323,7 @@ export function createApp() {
         if (!req.file || !req.file.buffer) {
           res.status(400).json({
             Result: -1,
-            Message: "Vui lòng chọn file Excel để nhập dữ liệu."
+            Message: "Vui long chon file Excel de nhap du lieu."
           });
           return;
         }
@@ -1113,7 +1342,7 @@ export function createApp() {
         if (!shop) {
           res.status(400).json({
             Result: -1,
-            Message: "Cửa hàng được chọn không hợp lệ."
+            Message: "Cua hang duoc chon khong hop le."
           });
           return;
         }
@@ -1124,7 +1353,7 @@ export function createApp() {
           actionType: "import",
           entityType: "installment_import",
           entityId: result.fileName,
-          description: `Nhập Excel trả góp cho ${shop.name}`,
+          description: `Nhap Excel tra gop cho ${shop.name}`,
           shopId: shop.id,
           shopName: shop.name,
           metadata: {
@@ -1138,19 +1367,19 @@ export function createApp() {
         });
         res.json({
           Result: 1,
-          Message: `Đã nhập ${result.importedRows} dòng từ file ${result.fileName}.`,
+          Message: `Da nhap ${result.importedRows} dong tu file ${result.fileName}.`,
           Data: result
         });
       } catch (error) {
         res.status(400).json({
           Result: -1,
-          Message: error instanceof Error ? error.message : "Không thể nhập dữ liệu Excel"
+          Message: error instanceof Error ? error.message : "Khong the nhap du lieu Excel."
         });
       }
     }
   );
 
-  app.delete("/installment/api/:id", requireModulePermission("installment"), (req: Request, res: Response) => {
+  app.delete("/installment/api/:id(\\d+)", requireModulePermission("installment"), (req: Request, res: Response) => {
     try {
       const user = req.session.user!;
       reconcileLegacyInstallmentsForUser(user);
@@ -1159,7 +1388,7 @@ export function createApp() {
       if (!installment || !requireShopScope(user, installment.shopId)) {
         res.status(404).json({
           Result: -1,
-          Message: "Không tìm thấy bản ghi để xóa."
+          Message: "Khong tim thay ban ghi de xoa."
         });
         return;
       }
@@ -1168,7 +1397,7 @@ export function createApp() {
       if (!installmentSnapshot) {
         res.status(404).json({
           Result: -1,
-          Message: "Không tìm thấy dữ liệu bản ghi để lưu vào thùng rác."
+          Message: "Khong tim thay du lieu ban ghi de luu vao thung rac."
         });
         return;
       }
@@ -1177,7 +1406,7 @@ export function createApp() {
       if (!deleted) {
         res.status(404).json({
           Result: -1,
-          Message: "Không tìm thấy bản ghi để xóa."
+          Message: "Khong tim thay ban ghi de xoa."
         });
         return;
       }
@@ -1216,7 +1445,7 @@ export function createApp() {
     } catch (error) {
       res.status(500).json({
         Result: -1,
-        Message: error instanceof Error ? error.message : "Không thể xóa bản ghi trả góp"
+        Message: error instanceof Error ? error.message : "Khong the xoa ban ghi tra gop."
       });
     }
   });
@@ -1229,7 +1458,7 @@ export function createApp() {
       if (ids.length === 0) {
         res.status(400).json({
           Result: -1,
-          Message: "Vui lòng chọn ít nhất một hợp đồng trả góp."
+          Message: "Vui long chon it nhat mot hop dong tra gop."
         });
         return;
       }
@@ -1296,7 +1525,7 @@ export function createApp() {
     } catch (error) {
       res.status(500).json({
         Result: -1,
-        Message: error instanceof Error ? error.message : "Không thể xóa nhiều hợp đồng trả góp"
+        Message: error instanceof Error ? error.message : "Khong the xoa nhieu hop dong tra gop."
       });
     }
   });
@@ -1312,7 +1541,7 @@ export function createApp() {
       if (ids.length === 0) {
         res.status(400).json({
           Result: -1,
-          Message: "Vui lòng chọn ít nhất một hợp đồng trả góp."
+          Message: "Vui long chon it nhat mot hop dong tra gop."
         });
         return;
       }
@@ -1320,7 +1549,7 @@ export function createApp() {
       if (statusCode === null && !statusText) {
         res.status(400).json({
           Result: -1,
-          Message: "Vui lòng nhập mã trạng thái hoặc tên trạng thái."
+          Message: "Vui long nhap ma trang thai hoac ten trang thai."
         });
         return;
       }
@@ -1357,12 +1586,12 @@ export function createApp() {
     } catch (error) {
       res.status(500).json({
         Result: -1,
-        Message: error instanceof Error ? error.message : "Không thể đổi trạng thái nhiều hợp đồng trả góp"
+        Message: error instanceof Error ? error.message : "Khong the doi trang thai nhieu hop dong tra gop."
       });
     }
   });
 
-  app.post("/installment/api/progress/:id", requireModulePermission("installment"), (req: Request, res: Response) => {
+  app.post("/installment/api/progress/:id(\\d+)", requireModulePermission("installment"), (req: Request, res: Response) => {
     try {
       const user = req.session.user!;
       reconcileLegacyInstallmentsForUser(user);
@@ -1371,7 +1600,7 @@ export function createApp() {
       if (!installment || !requireShopScope(user, installment.shopId)) {
         res.status(403).json({
           Result: -1,
-          Message: "Bạn không được cập nhật tiến độ của hợp đồng này."
+          Message: "Ban khong duoc cap nhat tien do cua hop dong nay."
         });
         return;
       }
@@ -1379,14 +1608,14 @@ export function createApp() {
       const paidPeriods = Array.isArray(req.body.paidPeriods) ? req.body.paidPeriods : [];
       const updated = updateInstallmentCollectionProgress(installmentId, paidPeriods);
       if (!updated) {
-        throw new Error("Không thể cập nhật tiến độ đóng tiền.");
+        throw new Error("Khong the cap nhat tien do dong tien.");
       }
       safeWriteAuditLogFromRequest(user, req, {
         moduleName: "installment",
         actionType: "update_progress",
         entityType: "installment",
         entityId: updated.id,
-        description: `Cập nhật tiến độ đóng tiền cho hợp đồng trả góp ${updated.customerRef || updated.id}`,
+        description: `Cap nhat tien do dong tien cho hop dong tra gop ${updated.customerRef || updated.id}`,
         shopId: updated.shopId,
         shopName: updated.shopName,
         metadata: {
@@ -1397,13 +1626,13 @@ export function createApp() {
       });
       res.json({
         Result: 1,
-        Message: "Đã cập nhật tiến độ đóng tiền.",
+        Message: "Da cap nhat tien do dong tien.",
         Data: updated
       });
     } catch (error) {
       res.status(500).json({
         Result: -1,
-        Message: error instanceof Error ? error.message : "Không thể cập nhật tiến độ đóng tiền."
+        Message: error instanceof Error ? error.message : "Khong the cap nhat tien do dong tien."
       });
     }
   });
@@ -1436,8 +1665,8 @@ export function createApp() {
     if (shopId && (!shop || !requireShopScope(user, shopId))) {
       req.session.flash = {
         type: "error",
-        title: "Không đủ quyền",
-        text: "Bạn không được truy cập cửa hàng này.",
+        title: "Không ủ quyền",
+        text: "Bạn không ược truy cập cửa hàng này.",
         mode: "modal"
       };
       res.redirect("/Shop/Index/");
@@ -1447,8 +1676,8 @@ export function createApp() {
     if (!shop && !user.canAccessAllShops) {
       req.session.flash = {
         type: "warning",
-        title: "Không đủ quyền",
-        text: "Tài khoản nhân viên chỉ được cập nhật cửa hàng được phân công.",
+        title: "Không ủ quyền",
+        text: "Tài khoản nhân viên ch0 ược cập nhật cửa hàng ược phân công.",
         mode: "modal"
       };
       res.redirect("/Shop/Index/");
@@ -1504,7 +1733,7 @@ export function createApp() {
 
       const savedShop = saveShop(req.body, shopId ?? undefined);
       if (!savedShop) {
-        throw new Error("Không thể lưu cửa hàng.");
+        throw new Error("Không thỒ lưu cửa hàng.");
       }
       safeWriteAuditLogFromRequest(user, req, {
         moduleName: "shop",
@@ -1529,8 +1758,8 @@ export function createApp() {
     } catch (error) {
       req.session.flash = {
         type: "error",
-        title: "Không thể lưu",
-        text: error instanceof Error ? error.message : "Không thể lưu cửa hàng.",
+        title: "Không thỒ lưu",
+        text: error instanceof Error ? error.message : "Không thỒ lưu cửa hàng.",
         mode: "modal"
       };
 
@@ -1559,7 +1788,7 @@ export function createApp() {
     } catch (error) {
       res.status(500).json({
         Result: -1,
-        Message: error instanceof Error ? error.message : "Không thể tải danh sách cửa hàng"
+        Message: error instanceof Error ? error.message : "Không thỒ tải danh sách cửa hàng"
       });
     }
   });
@@ -1574,7 +1803,7 @@ export function createApp() {
     } catch (error) {
       res.status(500).json({
         Result: -1,
-        Message: error instanceof Error ? error.message : "Không thể tải danh sách phường xã"
+        Message: error instanceof Error ? error.message : "Không thỒ tải danh sách phường xã"
       });
     }
   });
@@ -1590,7 +1819,7 @@ export function createApp() {
     } catch (error) {
       res.status(500).json({
         Result: -1,
-        Message: error instanceof Error ? error.message : "Không thể tải danh sách cửa hàng nhận dữ liệu"
+        Message: error instanceof Error ? error.message : "Kh?ng th? t?i danh s?ch c?a h?ng nh?n d? li?u"
       });
     }
   });
@@ -1603,7 +1832,7 @@ export function createApp() {
       if (!shop) {
         res.status(404).json({
           Result: -1,
-          Message: "Không tìm thấy cửa hàng để xóa."
+          Message: "Không tìm thấy cửa hàng Ồ xóa."
         });
         return;
       }
@@ -1612,7 +1841,7 @@ export function createApp() {
       if (!shopSnapshot) {
         res.status(404).json({
           Result: -1,
-          Message: "Không tìm thấy dữ liệu cửa hàng để lưu vào thùng rác."
+          Message: "Kh?ng t?m th?y d? li?u c?a h?ng ?? l?u v?o th?ng r?c."
         });
         return;
       }
@@ -1627,7 +1856,7 @@ export function createApp() {
         if (transferShopId === shopId) {
           res.status(400).json({
             Result: -1,
-            Message: "Không thể chọn chính cửa hàng đang xóa làm nơi nhận dữ liệu."
+            Message: "Kh?ng th? ch?n ch?nh c?a h?ng ?ang x?a l?m n?i nh?n d? li?u."
           });
           return;
         }
@@ -1635,7 +1864,7 @@ export function createApp() {
         if (transferShop && transferShop.status !== 1) {
           res.status(400).json({
             Result: -1,
-            Message: "Cửa hàng nhận dữ liệu phải ở trạng thái đang hoạt động."
+            Message: "C?a h?ng nh?n d? li?u ph?i ? tr?ng th?i ?ang ho?t ??ng."
           });
           return;
         }
@@ -1644,7 +1873,7 @@ export function createApp() {
       if (requiresTransfer && !transferShop) {
         res.status(400).json({
           Result: -1,
-          Message: "Cửa hàng này đang có dữ liệu liên quan. Vui lòng chọn cửa hàng nhận dữ liệu trước khi xóa."
+          Message: "C?a h?ng n?y ?ang c? d? li?u li?n quan. Vui l?ng ch?n c?a h?ng nh?n d? li?u tr??c khi x?a."
         });
         return;
       }
@@ -1656,7 +1885,7 @@ export function createApp() {
       if (!deleted) {
         res.status(404).json({
           Result: -1,
-          Message: "Không tìm thấy cửa hàng để xóa."
+          Message: "Kh?ng t?m th?y c?a h?ng ?? x?a."
         });
         return;
       }
@@ -1703,7 +1932,7 @@ export function createApp() {
     } catch (error) {
       res.status(500).json({
         Result: -1,
-        Message: error instanceof Error ? error.message : "Không thể xóa cửa hàng"
+        Message: error instanceof Error ? error.message : "Kh?ng th? x?a c?a h?ng"
       });
     }
   });
@@ -1715,7 +1944,7 @@ export function createApp() {
       if (ids.length === 0) {
         res.status(400).json({
           Result: -1,
-          Message: "Vui lòng chọn ít nhất một cửa hàng."
+          Message: "Vui l?ng ch?n ?t nh?t m?t c?a h?ng."
         });
         return;
       }
@@ -1748,7 +1977,7 @@ export function createApp() {
         if (ids.includes(transferShopId)) {
           res.status(400).json({
             Result: -1,
-            Message: "Không thể chọn cửa hàng đang nằm trong danh sách xóa làm nơi nhận dữ liệu."
+            Message: "Kh?ng th? ch?n c?a h?ng ?ang n?m trong danh s?ch x?a l?m n?i nh?n d? li?u."
           });
           return;
         }
@@ -1756,7 +1985,7 @@ export function createApp() {
         if (transferShop && transferShop.status !== 1) {
           res.status(400).json({
             Result: -1,
-            Message: "Cửa hàng nhận dữ liệu phải ở trạng thái đang hoạt động."
+            Message: "C?a h?ng nh?n d? li?u ph?i ? tr?ng th?i ?ang ho?t ??ng."
           });
           return;
         }
@@ -1765,7 +1994,7 @@ export function createApp() {
       if (requiresTransfer && !transferShop) {
         res.status(400).json({
           Result: -1,
-          Message: "Danh sách xóa đang có dữ liệu liên quan. Vui lòng chọn cửa hàng nhận dữ liệu trước khi xóa."
+          Message: "Danh s?ch x?a ?ang c? d? li?u li?n quan. Vui l?ng ch?n c?a h?ng nh?n d? li?u tr??c khi x?a."
         });
         return;
       }
@@ -1823,7 +2052,7 @@ export function createApp() {
     } catch (error) {
       res.status(500).json({
         Result: -1,
-        Message: error instanceof Error ? error.message : "Không thể xóa nhiều cửa hàng"
+        Message: error instanceof Error ? error.message : "Kh?ng th? x?a nhi?u c?a h?ng"
       });
     }
   });
@@ -1836,7 +2065,7 @@ export function createApp() {
       if (ids.length === 0) {
         res.status(400).json({
           Result: -1,
-          Message: "Vui lòng chọn ít nhất một cửa hàng."
+          Message: "Vui l?ng ch?n ?t nh?t m?t c?a h?ng."
         });
         return;
       }
@@ -1880,7 +2109,7 @@ export function createApp() {
     } catch (error) {
       res.status(500).json({
         Result: -1,
-        Message: error instanceof Error ? error.message : "Không thể đổi trạng thái nhiều cửa hàng"
+        Message: error instanceof Error ? error.message : "Kh?ng th? ??i tr?ng th?i nhi?u c?a h?ng"
       });
     }
   });
@@ -1915,7 +2144,7 @@ export function createApp() {
       req.session.flash = {
         type: "error",
         title: "Không tìm thấy",
-        text: "Bản ghi nhân viên không tồn tại hoặc bạn không được truy cập.",
+        text: "Bản ghi nhân viên không tn tại hoặc bạn không ược truy cập.",
         mode: "modal"
       };
       res.redirect("/Staff/Index/");
@@ -1975,15 +2204,15 @@ export function createApp() {
       req.session.flash = {
         type: "success",
         title: staffId ? "Cập nhật thành công" : "Lưu thành công",
-        text: staffId ? "Đã cập nhật nhân viên." : "Đã tạo mới nhân viên.",
+        text: staffId ? "Đã cập nhật nhân viên." : "Đã tạo m:i nhân viên.",
         mode: "toast"
       };
       res.redirect("/Staff/Index/");
     } catch (error) {
       req.session.flash = {
         type: "error",
-        title: "Không thể lưu",
-        text: error instanceof Error ? error.message : "Không thể lưu nhân viên.",
+        title: "Không thỒ lưu",
+        text: error instanceof Error ? error.message : "Không thỒ lưu nhân viên.",
         mode: "modal"
       };
       const staffId = parseOptionalNumber(req.body.StaffID);
@@ -2021,7 +2250,7 @@ export function createApp() {
     } catch (error) {
       res.status(500).json({
         Result: -1,
-        Message: error instanceof Error ? error.message : "Không thể tải danh sách nhân viên"
+        Message: error instanceof Error ? error.message : "Không thỒ tải danh sách nhân viên"
       });
     }
   });
@@ -2039,7 +2268,7 @@ export function createApp() {
     } catch (error) {
       res.status(500).json({
         Result: -1,
-        Message: error instanceof Error ? error.message : "Không thể tải danh sách nhân viên nhận dữ liệu"
+        Message: error instanceof Error ? error.message : "Kh?ng th? t?i danh s?ch nh?n vi?n nh?n d? li?u"
       });
     }
   });
@@ -2052,7 +2281,7 @@ export function createApp() {
       if (!staff || !requireShopScope(user, staff.shopId)) {
         res.status(404).json({
           Result: -1,
-          Message: "Không tìm thấy nhân viên để xóa."
+          Message: "Không tìm thấy nhân viên Ồ xóa."
         });
         return;
       }
@@ -2061,7 +2290,7 @@ export function createApp() {
       if (!staffSnapshot) {
         res.status(404).json({
           Result: -1,
-          Message: "Không tìm thấy dữ liệu nhân viên để lưu vào thùng rác."
+          Message: "Kh?ng t?m th?y d? li?u nh?n vi?n ?? l?u v?o th?ng r?c."
         });
         return;
       }
@@ -2075,7 +2304,7 @@ export function createApp() {
         if (transferStaffId === staffId) {
           res.status(400).json({
             Result: -1,
-            Message: "Không thể chọn chính nhân viên đang xóa làm người nhận dữ liệu."
+            Message: "Kh?ng th? ch?n ch?nh nh?n vi?n ?ang x?a l?m ng??i nh?n d? li?u."
           });
           return;
         }
@@ -2083,7 +2312,7 @@ export function createApp() {
         if (!transferStaff || transferStaff.status !== 1 || !requireShopScope(user, transferStaff.shopId)) {
           res.status(400).json({
             Result: -1,
-            Message: "Nhân viên nhận dữ liệu không hợp lệ hoặc nằm ngoài phạm vi truy cập."
+            Message: "Nh?n vi?n nh?n d? li?u kh?ng h?p l? ho?c n?m ngo?i ph?m vi truy c?p."
           });
           return;
         }
@@ -2092,7 +2321,7 @@ export function createApp() {
       if (relatedInstallmentCount > 0 && !transferStaff) {
         res.status(400).json({
           Result: -1,
-          Message: "Nhân viên này đang có dữ liệu liên quan. Vui lòng chọn nhân viên nhận dữ liệu trước khi xóa."
+          Message: "Nh?n vi?n n?y ?ang c? d? li?u li?n quan. Vui l?ng ch?n nh?n vi?n nh?n d? li?u tr??c khi x?a."
         });
         return;
       }
@@ -2105,7 +2334,7 @@ export function createApp() {
       if (!deleted) {
         res.status(404).json({
           Result: -1,
-          Message: "Không tìm thấy nhân viên để xóa."
+          Message: "Không tìm thấy nhân viên Ồ xóa."
         });
         return;
       }
@@ -2149,7 +2378,7 @@ export function createApp() {
     } catch (error) {
       res.status(500).json({
         Result: -1,
-        Message: error instanceof Error ? error.message : "Không thể xóa nhân viên"
+        Message: error instanceof Error ? error.message : "Không thỒ xóa nhân viên"
       });
     }
   });
@@ -2161,7 +2390,7 @@ export function createApp() {
       if (ids.length === 0) {
         res.status(400).json({
           Result: -1,
-          Message: "Vui lòng chọn ít nhất một nhân viên."
+          Message: "Vui l?ng ch?n ?t nh?t m?t nh?n vi?n."
         });
         return;
       }
@@ -2197,7 +2426,7 @@ export function createApp() {
         if (ids.includes(transferStaffId)) {
           res.status(400).json({
             Result: -1,
-            Message: "Không thể chọn nhân viên nằm trong danh sách xóa làm người nhận dữ liệu."
+            Message: "Kh?ng th? ch?n nh?n vi?n n?m trong danh s?ch x?a l?m ng??i nh?n d? li?u."
           });
           return;
         }
@@ -2205,7 +2434,7 @@ export function createApp() {
         if (!transferStaff || transferStaff.status !== 1 || !requireShopScope(user, transferStaff.shopId)) {
           res.status(400).json({
             Result: -1,
-            Message: "Nhân viên nhận dữ liệu không hợp lệ hoặc nằm ngoài phạm vi truy cập."
+            Message: "Nh?n vi?n nh?n d? li?u kh?ng h?p l? ho?c n?m ngo?i ph?m vi truy c?p."
           });
           return;
         }
@@ -2214,7 +2443,7 @@ export function createApp() {
       if (relatedInstallmentCount > 0 && !transferStaff) {
         res.status(400).json({
           Result: -1,
-          Message: "Danh sách xóa đang có dữ liệu liên quan. Vui lòng chọn nhân viên nhận dữ liệu trước khi xóa."
+          Message: "Danh s?ch x?a ?ang c? d? li?u li?n quan. Vui l?ng ch?n nh?n vi?n nh?n d? li?u tr??c khi x?a."
         });
         return;
       }
@@ -2264,7 +2493,7 @@ export function createApp() {
     } catch (error) {
       res.status(500).json({
         Result: -1,
-        Message: error instanceof Error ? error.message : "Không thể xóa nhiều nhân viên"
+        Message: error instanceof Error ? error.message : "Không thỒ xóa nhiều nhân viên"
       });
     }
   });
@@ -2277,7 +2506,7 @@ export function createApp() {
       if (ids.length === 0) {
         res.status(400).json({
           Result: -1,
-          Message: "Vui lòng chọn ít nhất một nhân viên."
+          Message: "Vui l?ng ch?n ?t nh?t m?t nh?n vi?n."
         });
         return;
       }
@@ -2321,7 +2550,7 @@ export function createApp() {
     } catch (error) {
       res.status(500).json({
         Result: -1,
-        Message: error instanceof Error ? error.message : "Không thể đổi trạng thái nhiều nhân viên"
+        Message: error instanceof Error ? error.message : "Kh?ng th? ??i tr?ng th?i nhi?u nh?n vi?n"
       });
     }
   });
@@ -2353,7 +2582,7 @@ export function createApp() {
       const user = req.session.user!;
       const updatedStaff = updateStaffPermissions(Number(req.params.id), req.body);
       if (!updatedStaff) {
-        throw new Error("Không thể cập nhật quyền nhân viên.");
+        throw new Error("Không thỒ cập nhật quyền nhân viên.");
       }
       safeWriteAuditLogFromRequest(user, req, {
         moduleName: "permission",
@@ -2379,8 +2608,8 @@ export function createApp() {
     } catch (error) {
       req.session.flash = {
         type: "error",
-        title: "Không thể phân quyền",
-        text: error instanceof Error ? error.message : "Không thể cập nhật quyền nhân viên.",
+        title: "Không thỒ phân quyền",
+        text: error instanceof Error ? error.message : "Không thỒ cập nhật quyền nhân viên.",
         mode: "modal"
       };
     }
@@ -2420,7 +2649,7 @@ export function createApp() {
     } catch (error) {
       res.status(500).json({
         Result: -1,
-        Message: error instanceof Error ? error.message : "Không thể tải danh sách thùng rác"
+        Message: error instanceof Error ? error.message : "Không thỒ tải danh sách thùng rác"
       });
     }
   });
@@ -2457,7 +2686,7 @@ export function createApp() {
         if (Number.isFinite(snapshotShopId) && snapshotShopId > 0 && !getShopById(snapshotShopId)) {
           res.status(400).json({
             Result: -1,
-            Message: "Không thể khôi phục nhân viên vì cửa hàng gốc chưa tồn tại. Hãy khôi phục cửa hàng trước."
+            Message: "Không thỒ khôi phục nhân viên vì cửa hàng gc chưa tn tại. Hãy khôi phục cửa hàng trư:c."
           });
           return;
         }
@@ -2467,7 +2696,7 @@ export function createApp() {
         if (Number.isFinite(snapshotShopId) && snapshotShopId > 0 && !getShopById(snapshotShopId)) {
           res.status(400).json({
             Result: -1,
-            Message: "Không thể khôi phục hợp đồng vì cửa hàng gốc chưa tồn tại. Hãy khôi phục cửa hàng trước."
+            Message: "Không thỒ khôi phục hợp ng vì cửa hàng gc chưa tn tại. Hãy khôi phục cửa hàng trư:c."
           });
           return;
         }
@@ -2482,7 +2711,7 @@ export function createApp() {
 
       const marked = markTrashItemRestored(trashItem.id);
       if (!marked) {
-        throw new Error("Không thể cập nhật trạng thái khôi phục trong thùng rác.");
+        throw new Error("Không thỒ cập nhật trạng thái khôi phục trong thùng rác.");
       }
 
       const restoredRecordShopId =
@@ -2527,7 +2756,7 @@ export function createApp() {
     } catch (error) {
       res.status(500).json({
         Result: -1,
-        Message: error instanceof Error ? error.message : "Không thể khôi phục dữ liệu từ thùng rác"
+        Message: error instanceof Error ? error.message : "Kh?ng th? kh?i ph?c d? li?u t? th?ng r?c"
       });
     }
   });
@@ -2572,7 +2801,7 @@ export function createApp() {
         actionType: "export",
         entityType: "audit_log",
         entityId: "history-export",
-        description: `Xuất Excel lịch sử thao tác (${exportItems.length} bản ghi)`,
+        description: `Xuất Excel l9ch sử thao tác (${exportItems.length} bản ghi)`,
         shopId: scopedShopId ?? user.shopId,
         metadata: {
           totalRows: exportItems.length,
@@ -2599,10 +2828,10 @@ export function createApp() {
         "Thao tác": item.actionType || "",
         "Phương thức": item.method || "",
         "Đường dẫn": item.path || "",
-        "Loại thực thể": item.entityType || "",
-        "ID thực thể": item.entityId || "",
-        "Nội dung": item.description || "",
-        "Địa chỉ IP": item.ipAddress || ""
+        "Loại thực thỒ": item.entityType || "",
+        "ID thực thỒ": item.entityId || "",
+        "N?i dung": item.description || "",
+        "Đ9a ch0 IP": item.ipAddress || ""
       }));
 
       const workbook = XLSX.utils.book_new();
@@ -2621,8 +2850,8 @@ export function createApp() {
     } catch (error) {
       req.session.flash = {
         type: "error",
-        title: "Không thể xuất Excel",
-        text: error instanceof Error ? error.message : "Không thể xuất dữ liệu lịch sử thao tác.",
+        title: "Không thỒ xuất Excel",
+        text: error instanceof Error ? error.message : "Kh?ng th? xu?t d? li?u l?ch s? thao t?c.",
         mode: "modal"
       };
       res.redirect("/History/");
@@ -2644,6 +2873,7 @@ export function createApp() {
       shopId: scopedShopId ?? 0
     };
     const shopOptions = getScopedShopOptions(user);
+    const installerOptions = getInstallerOptions(user);
     const buildPageUrl = (pageNumber: number) => {
       const queryString = buildHistoryQueryString({
         ...viewFilters,
@@ -2656,7 +2886,7 @@ export function createApp() {
       return queryString ? `/History/Export?${queryString}` : "/History/Export";
     })();
     res.render("history", {
-      pageTitle: "Lịch sử thao tác",
+      pageTitle: "L9ch sử thao tác",
       activePath: "/History/",
       navItems: visibleNavItems(user),
       auditLogs,
@@ -2679,3 +2909,5 @@ export function createApp() {
 
   return app;
 }
+
+

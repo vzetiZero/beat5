@@ -54,6 +54,8 @@ exports.deleteInstallment = deleteInstallment;
 exports.deleteInstallments = deleteInstallments;
 exports.updateInstallmentStatus = updateInstallmentStatus;
 exports.updateInstallmentCollectionProgress = updateInstallmentCollectionProgress;
+exports.updateInstallmentNextPaymentDay = updateInstallmentNextPaymentDay;
+exports.previewInstallment = previewInstallment;
 const node_fs_1 = __importDefault(require("node:fs"));
 const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 const XLSX = __importStar(require("xlsx"));
@@ -682,6 +684,69 @@ function buildCollectionSchedule({ loanDate, loanDays, collectionIntervalDays, t
 
     return schedule;
 }
+function getInstallmentCollectionState(row, loanDate, loanDays) {
+    const numericLoanDays = loanDays === null || loanDays === undefined ? Number.NaN : Number(loanDays);
+    if (!loanDate || !Number.isFinite(numericLoanDays) || numericLoanDays <= 0) {
+        return {
+            nextDueDate: "",
+            finalDueDate: "",
+            dueInDays: null,
+            dueStatus: ""
+        };
+    }
+    const schedule = buildCollectionSchedule({
+        loanDate,
+        loanDays: numericLoanDays,
+        collectionIntervalDays: Number(row.collection_interval_days ?? 1),
+        totalRevenue: Number(row.revenue ?? 0),
+        prepaidPeriodCount: 0
+    });
+    const finalDueDate = addDaysToIsoDate(loanDate, numericLoanDays);
+    if (schedule.length === 0) {
+        return {
+            nextDueDate: "",
+            finalDueDate,
+            dueInDays: null,
+            dueStatus: ""
+        };
+    }
+    const storedProgress = parseCollectionProgress(row.collection_progress);
+    const paidProgressSet = new Set(storedProgress);
+    if (paidProgressSet.size === 0) {
+        let remainingPaidBefore = Math.max(0, Number(row.paid_before ?? 0));
+        for (const period of schedule) {
+            const periodAmount = Number(period.amount || 0);
+            if (remainingPaidBefore < periodAmount) {
+                break;
+            }
+            remainingPaidBefore -= periodAmount;
+            paidProgressSet.add(Number(period.periodIndex));
+        }
+    }
+    const nextUnpaidPeriod = schedule.find((period) => !paidProgressSet.has(Number(period.periodIndex))) || null;
+    const explicitPaymentDay = mapPaymentDayValue(row.payment_day, loanDate).paymentDay;
+    const nextDueDate = explicitPaymentDay || nextUnpaidPeriod?.dueDate || "";
+    const todayIsoDate = new Date().toISOString().slice(0, 10);
+    const dueInDays = nextDueDate ? getDaysBetweenIsoDates(todayIsoDate, nextDueDate) : null;
+    let dueStatus = "";
+    if (dueInDays !== null) {
+        if (dueInDays < 0) {
+            dueStatus = "overdue";
+        }
+        else if (dueInDays === 0) {
+            dueStatus = "due_today";
+        }
+        else if (dueInDays <= 3) {
+            dueStatus = "due_soon";
+        }
+    }
+    return {
+        nextDueDate,
+        finalDueDate,
+        dueInDays,
+        dueStatus
+    };
+}
 
 function normalizePaymentDateValue(value, loanDateIso, normalizationMessages) {
     const raw = String(value ?? "").trim();
@@ -781,6 +846,7 @@ function normalizeInstallmentInput(input) {
             .filter((period) => period.isPrepaid)
             .reduce((total, period) => total + Number(period.amount || 0), 0);
         const firstUnpaidPeriod = schedule.find((period) => !period.isPrepaid) || null;
+        const paymentDate = normalizePaymentDateValue(input.paymentDay, isoDate);
 
         return {
             stt: parseNullableInteger(input.stt),
@@ -797,7 +863,7 @@ function normalizeInstallmentInput(input) {
             setupFee: parseInteger(input.setupFee),
             netDisbursement: parseInteger(input.netDisbursement) || loanPackage,
             paidBefore,
-            paymentDay: firstUnpaidPeriod ? firstUnpaidPeriod.dueDate : null,
+            paymentDay: paymentDate.value || (firstUnpaidPeriod ? firstUnpaidPeriod.dueDate : null),
             loanDays,
             installmentAmount,
             note: String(input.note ?? "").trim(),
@@ -1016,24 +1082,13 @@ function parseCollectionProgress(value) {
 function mapInstallmentRow(row) {
     const loanDate = String(row.loan_date ?? "");
     const loanDays = row.loan_days === null || row.loan_days === undefined ? null : Number(row.loan_days);
-    const paymentDate = mapPaymentDayValue(row.payment_day, loanDate);
-    const dueDate = loanDate && loanDays !== null && Number.isFinite(loanDays) && loanDays > 0
-        ? addDaysToIsoDate(loanDate, loanDays)
-        : "";
-    const todayIsoDate = new Date().toISOString().slice(0, 10);
-    const dueInDays = dueDate ? getDaysBetweenIsoDates(todayIsoDate, dueDate) : null;
-    let dueStatus = "";
-    if (dueInDays !== null) {
-        if (dueInDays < 0) {
-            dueStatus = "overdue";
-        }
-        else if (dueInDays === 0) {
-            dueStatus = "due_today";
-        }
-        else if (dueInDays <= 3) {
-            dueStatus = "due_soon";
-        }
-    }
+    const collectionState = getInstallmentCollectionState(row, loanDate, loanDays);
+    const paymentDate = collectionState.nextDueDate
+        ? { paymentDay: collectionState.nextDueDate, paymentDayDisplay: formatDisplayDate(collectionState.nextDueDate) }
+        : mapPaymentDayValue(row.payment_day, loanDate);
+    const dueDate = collectionState.finalDueDate;
+    const dueInDays = collectionState.dueInDays;
+    const dueStatus = collectionState.dueStatus;
     return {
         id: Number(row.id),
         stt: row.stt === null || row.stt === undefined ? null : Number(row.stt),
@@ -1083,7 +1138,7 @@ function sanitizeFilters(filters) {
         fromDate: String(filters.fromDate || "").trim(),
         toDate: String(filters.toDate || "").trim(),
         loanTime: typeof filters.loanTime === "number" ? filters.loanTime : null,
-        dueStatus: dueStatus === "due_today" || dueStatus === "due_soon" || dueStatus === "overdue" ? dueStatus : "",
+        dueStatus: dueStatus === "due_today" || dueStatus === "due_soon" || dueStatus === "overdue" || dueStatus === "calendar_due" || dueStatus === "due_tomorrow" ? dueStatus : "",
         searchShopId: typeof filters.searchShopId === "number" ? filters.searchShopId : null,
         page,
         perPage,
@@ -1242,37 +1297,6 @@ function listInstallments(filters) {
         whereClauses.push("loan_days = ?");
         bindings.push(sanitized.loanTime);
     }
-    if (sanitized.dueStatus === "due_today") {
-        whereClauses.push(`(
-      loan_date IS NOT NULL
-      AND TRIM(loan_date) <> ''
-      AND loan_days IS NOT NULL
-      AND loan_days > 0
-      AND date(loan_date, '+' || loan_days || ' day') = ?
-    )`);
-        bindings.push(todayIsoDate);
-    }
-    if (sanitized.dueStatus === "due_soon") {
-        whereClauses.push(`(
-      loan_date IS NOT NULL
-      AND TRIM(loan_date) <> ''
-      AND loan_days IS NOT NULL
-      AND loan_days > 0
-      AND date(loan_date, '+' || loan_days || ' day') > ?
-      AND date(loan_date, '+' || loan_days || ' day') <= date(?, '+3 day')
-    )`);
-        bindings.push(todayIsoDate, todayIsoDate);
-    }
-    if (sanitized.dueStatus === "overdue") {
-        whereClauses.push(`(
-      loan_date IS NOT NULL
-      AND TRIM(loan_date) <> ''
-      AND loan_days IS NOT NULL
-      AND loan_days > 0
-      AND date(loan_date, '+' || loan_days || ' day') < ?
-    )`);
-        bindings.push(todayIsoDate);
-    }
     if (sanitized.searchShopId !== null && Number.isFinite(sanitized.searchShopId) && sanitized.searchShopId !== 0) {
         whereClauses.push("shop_id = ?");
         bindings.push(sanitized.searchShopId);
@@ -1303,22 +1327,6 @@ function listInstallments(filters) {
     };
     const sortColumn = allowedSortColumns[sanitized.sortColumn] ? sanitized.sortColumn : "loanDate";
     const orderBySql = `${allowedSortColumns[sortColumn]} ${sanitized.sortDirection.toUpperCase()}, id DESC`;
-    const offset = (sanitized.page - 1) * sanitized.perPage;
-    const totalRow = db
-        .prepare(`SELECT COUNT(*) AS count FROM installments ${whereSql}`)
-        .get(...toBindingArray(bindings));
-    const summaryRow = db
-        .prepare(`
-      SELECT
-        COUNT(*) AS count,
-        COALESCE(SUM(revenue), 0) AS totalRevenue,
-        COALESCE(SUM(net_disbursement), 0) AS totalNetDisbursement,
-        COALESCE(SUM(paid_before), 0) AS totalPaidBefore,
-        COALESCE(SUM(installment_amount), 0) AS totalInstallmentAmount
-      FROM installments
-      ${whereSql}
-    `)
-        .get(...toBindingArray(bindings));
     const rows = db
         .prepare(`
       SELECT
@@ -1355,20 +1363,8 @@ function listInstallments(filters) {
       FROM installments
       ${whereSql}
       ORDER BY ${orderBySql}
-      LIMIT ?
-      OFFSET ?
     `)
-        .all(...toBindingArray([...bindings, sanitized.perPage, offset]));
-    const availableLoanDays = db
-        .prepare(`
-        SELECT DISTINCT loan_days
-        FROM installments
-        ${whereSql ? `${whereSql} AND` : "WHERE"} loan_days IS NOT NULL AND loan_days > 0
-        ORDER BY loan_days ASC
-      `)
-        .all(...toBindingArray(bindings))
-        .map((item) => item.loan_days)
-        .filter((value) => value !== null);
+        .all(...toBindingArray(bindings));
     const availableStatuses = db
         .prepare(`
         SELECT DISTINCT status_code, status_text
@@ -1450,38 +1446,120 @@ function listInstallments(filters) {
         statusText: String(row.status_text || "Chưa đặt trạng thái"),
         count: Number(row.count || 0)
     }));
-    const items = rows.map(mapInstallmentRow);
+    const allItems = rows.map(mapInstallmentRow);
+    const filteredItems = sanitized.dueStatus
+        ? sanitized.dueStatus === "calendar_due"
+            ? allItems.filter((item) => item.dueStatus === "due_today" || item.dueStatus === "due_soon" || item.dueStatus === "overdue")
+            : sanitized.dueStatus === "due_tomorrow"
+                ? allItems.filter((item) => Number(item.dueInDays) === 1)
+                : allItems.filter((item) => item.dueStatus === sanitized.dueStatus)
+        : allItems;
+    const offset = (sanitized.page - 1) * sanitized.perPage;
+    const items = filteredItems.slice(offset, offset + sanitized.perPage);
+    const availableLoanDays = Array.from(new Set(filteredItems
+        .map((item) => item.loanDays)
+        .filter((value) => value !== null && Number.isFinite(value) && value > 0)))
+        .sort((left, right) => Number(left) - Number(right));
+    const visibleStatuses = Array.from(new Map(filteredItems
+        .filter((item) => item.statusCode !== null || String(item.statusText || "").trim())
+        .map((item) => {
+        const key = `${item.statusCode ?? 0}::${String(item.statusText || "").trim()}`;
+        return [key, {
+                code: item.statusCode ?? 0,
+                label: item.statusText || `Trang thai ${item.statusCode ?? 0}`
+            }];
+    })).values());
+    const recalculatedStatusSummaryMap = new Map();
+    filteredItems.forEach((item) => {
+        const statusCode = item.statusCode === null || item.statusCode === undefined ? null : Number(item.statusCode);
+        const statusText = String(item.statusText || "Chua dat trang thai");
+        const key = `${statusCode ?? "null"}::${statusText}`;
+        const current = recalculatedStatusSummaryMap.get(key) || {
+            statusCode,
+            statusText,
+            count: 0
+        };
+        current.count += 1;
+        recalculatedStatusSummaryMap.set(key, current);
+    });
+    const recalculatedStatusSummary = Array.from(recalculatedStatusSummaryMap.values()).sort((left, right) => right.count - left.count || Number(left.statusCode ?? 0) - Number(right.statusCode ?? 0));
+    const summary = filteredItems.reduce((accumulator, item) => {
+        accumulator.count += 1;
+        accumulator.totalRevenue += Number(item.revenue || 0);
+        accumulator.totalNetDisbursement += Number(item.netDisbursement || 0);
+        accumulator.totalPaidBefore += Number(item.paidBefore || 0);
+        accumulator.totalInstallmentAmount += Number(item.installmentAmount || 0);
+        return accumulator;
+    }, {
+        count: 0,
+        totalRevenue: 0,
+        totalNetDisbursement: 0,
+        totalPaidBefore: 0,
+        totalInstallmentAmount: 0
+    });
+    const dashboard = filteredItems.reduce((accumulator, item) => {
+        accumulator.totalContracts += 1;
+        accumulator.totalLoanPackage += Number(item.loanPackage || 0);
+        accumulator.totalRevenue += Number(item.revenue || 0);
+        accumulator.totalNetDisbursement += Number(item.netDisbursement || 0);
+        accumulator.totalPaidBefore += Number(item.paidBefore || 0);
+        accumulator.totalInstallmentAmount += Number(item.installmentAmount || 0);
+        if (Number.isFinite(Number(item.loanDays)) && Number(item.loanDays) > 0) {
+            accumulator.loanDaysTotal += Number(item.loanDays);
+            accumulator.loanDaysCount += 1;
+        }
+        if (item.loanDate === todayIsoDate) {
+            accumulator.contractsTodayCount += 1;
+        }
+        if (item.dueStatus === "due_today") {
+            accumulator.dueTodayCount += 1;
+        }
+        else if (item.dueStatus === "due_soon") {
+            accumulator.dueSoonCount += 1;
+        }
+        else if (item.dueStatus === "overdue") {
+            accumulator.overdueCount += 1;
+        }
+        return accumulator;
+    }, {
+        totalContracts: 0,
+        totalLoanPackage: 0,
+        totalRevenue: 0,
+        totalNetDisbursement: 0,
+        totalPaidBefore: 0,
+        totalInstallmentAmount: 0,
+        loanDaysTotal: 0,
+        loanDaysCount: 0,
+        contractsTodayCount: 0,
+        dueTodayCount: 0,
+        dueSoonCount: 0,
+        overdueCount: 0
+    });
     return {
         items,
-        total: Number(totalRow.count || 0),
+        total: filteredItems.length,
         page: sanitized.page,
         perPage: sanitized.perPage,
-        totalPages: Math.max(1, Math.ceil(Number(totalRow.count || 0) / sanitized.perPage)),
+        totalPages: Math.max(1, Math.ceil(filteredItems.length / sanitized.perPage)),
         sortColumn,
         sortDirection: sanitized.sortDirection,
         availableLoanDays,
-        availableStatuses,
-        summary: {
-            count: Number(summaryRow.count || 0),
-            totalRevenue: Number(summaryRow.totalRevenue || 0),
-            totalNetDisbursement: Number(summaryRow.totalNetDisbursement || 0),
-            totalPaidBefore: Number(summaryRow.totalPaidBefore || 0),
-            totalInstallmentAmount: Number(summaryRow.totalInstallmentAmount || 0)
-        },
+        availableStatuses: visibleStatuses,
+        summary,
         dashboard: {
-            totalContracts: Number(dashboardRow.totalContracts || 0),
-            totalLoanPackage: Number(dashboardRow.totalLoanPackage || 0),
-            totalRevenue: Number(dashboardRow.totalRevenue || 0),
-            totalNetDisbursement: Number(dashboardRow.totalNetDisbursement || 0),
-            totalPaidBefore: Number(dashboardRow.totalPaidBefore || 0),
-            totalInstallmentAmount: Number(dashboardRow.totalInstallmentAmount || 0),
-            averageLoanDays: Number(dashboardRow.averageLoanDays || 0),
-            contractsTodayCount: Number(dashboardRow.contractsTodayCount || 0),
-            dueTodayCount: Number(dashboardRow.dueTodayCount || 0),
-            dueSoonCount: Number(dashboardRow.dueSoonCount || 0),
-            overdueCount: Number(dashboardRow.overdueCount || 0)
+            totalContracts: dashboard.totalContracts,
+            totalLoanPackage: dashboard.totalLoanPackage,
+            totalRevenue: dashboard.totalRevenue,
+            totalNetDisbursement: dashboard.totalNetDisbursement,
+            totalPaidBefore: dashboard.totalPaidBefore,
+            totalInstallmentAmount: dashboard.totalInstallmentAmount,
+            averageLoanDays: dashboard.loanDaysCount > 0 ? dashboard.loanDaysTotal / dashboard.loanDaysCount : 0,
+            contractsTodayCount: dashboard.contractsTodayCount,
+            dueTodayCount: dashboard.dueTodayCount,
+            dueSoonCount: dashboard.dueSoonCount,
+            overdueCount: dashboard.overdueCount
         },
-        statusSummary,
+        statusSummary: recalculatedStatusSummary,
         lastImport: lastImportRow
             ? {
                 fileName: lastImportRow.file_name,
@@ -1501,6 +1579,42 @@ function getInstallmentPageBootstrap() {
         statusSummary: result.statusSummary,
         dashboard: result.dashboard,
         lastImport: result.lastImport
+    };
+}
+function previewInstallment(input) {
+    const normalized = normalizeInstallmentInput(input);
+    const loanDays = Number(normalized.loanDays || 0);
+    const collectionIntervalDays = Number(normalized.collectionIntervalDays || 1);
+    const schedule = buildCollectionSchedule({
+        loanDate: normalized.loanDate,
+        loanDays,
+        collectionIntervalDays,
+        totalRevenue: Number(normalized.revenue || 0),
+        prepaidPeriodCount: Number(normalized.prepaidPeriodCount || 0)
+    });
+    const firstUnpaidPeriod = schedule.find((period) => !period.isPrepaid) || schedule[0] || null;
+    const lastPeriod = schedule[schedule.length - 1] || null;
+    return {
+        normalized,
+        schedule,
+        summary: {
+            nextStt: normalized.stt ?? getNextInstallmentStt(),
+            totalPeriods: schedule.length,
+            collectionIntervalDays,
+            loanDays,
+            loanPackage: Number(normalized.loanPackage || 0),
+            revenue: Number(normalized.revenue || 0),
+            totalInterest: Math.max(0, Number(normalized.revenue || 0) - Number(normalized.loanPackage || 0)),
+            installmentAmount: Number(normalized.installmentAmount || 0),
+            paidBefore: Number(normalized.paidBefore || 0),
+            firstPaymentDay: firstUnpaidPeriod?.dueDate || normalized.paymentDay || "",
+            firstPaymentDayDisplay: firstUnpaidPeriod?.dueDate ? formatDisplayDate(firstUnpaidPeriod.dueDate) : formatInstallmentDateForUi(normalized.paymentDay),
+            finalDueDate: lastPeriod?.dueDate || (normalized.loanDate && loanDays > 0 ? addDaysToIsoDate(normalized.loanDate, loanDays) : ""),
+            finalDueDateDisplay: lastPeriod?.dueDate
+                ? formatDisplayDate(lastPeriod.dueDate)
+                : (normalized.loanDate && loanDays > 0 ? formatDisplayDate(addDaysToIsoDate(normalized.loanDate, loanDays)) : ""),
+            prepaidPeriodCount: Number(normalized.prepaidPeriodCount || 0)
+        }
     };
 }
 function formatInstallmentDateForUi(value) {
@@ -1995,11 +2109,18 @@ function updateInstallmentCollectionProgress(id, paidPeriodIndices) {
     const firstUnpaidPeriod = schedule.find((period) => !progressSet.has(period.periodIndex)) || null;
     const nextPaymentDay = firstUnpaidPeriod?.dueDate || addDaysToIsoDate(installment.loanDate, Number(installment.loanDays ?? 0));
     const allPeriodsPaid = normalizedProgress.length === schedule.length;
+    const currentStatusText = String(installment.statusText || "").trim();
+    const normalizedCurrentStatusText = currentStatusText.toLowerCase();
+    const isClosedStatus = normalizedCurrentStatusText === "đã hoàn tất"
+        || normalizedCurrentStatusText === "da hoan tat"
+        || normalizedCurrentStatusText === "đã đóng"
+        || normalizedCurrentStatusText === "da dong";
     const nextStatusText = allPeriodsPaid
-        ? "Đã hoàn tất"
-        : String(installment.statusText || "").trim() === "Đã hoàn tất"
+        ? "Đã đóng"
+        : isClosedStatus
             ? "Đang vay"
-            : String(installment.statusText || "").trim();
+            : currentStatusText;
+    const nextStatusCode = allPeriodsPaid ? 1 : installment.statusCode;
     const db = getDb();
     const result = db.prepare(`
       UPDATE installments
@@ -2008,12 +2129,41 @@ function updateInstallmentCollectionProgress(id, paidPeriodIndices) {
         payment_day = ?,
         prepaid_period_count = ?,
         collection_progress = ?,
+        status_code = ?,
         status_text = ?,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `).run(paidBefore, nextPaymentDay, prepaidPeriodCount, JSON.stringify(normalizedProgress), nextStatusText, installmentId);
+    `).run(paidBefore, nextPaymentDay, prepaidPeriodCount, JSON.stringify(normalizedProgress), nextStatusCode, nextStatusText, installmentId);
     if (Number(result.changes || 0) === 0) {
         throw new Error("Không thể cập nhật tiến độ đóng tiền.");
+    }
+    return getInstallmentById(installmentId);
+}
+function updateInstallmentNextPaymentDay(id, nextPaymentDay) {
+    const installmentId = Number(id);
+    if (!Number.isFinite(installmentId) || installmentId <= 0) {
+        throw new Error("ID hợp đồng không hợp lệ.");
+    }
+    const installment = getInstallmentById(installmentId);
+    if (!installment) {
+        throw new Error("Không tìm thấy hợp đồng trả góp.");
+    }
+    const normalizedPaymentDate = normalizePaymentDateValue(nextPaymentDay, installment.loanDate);
+    if (!normalizedPaymentDate.value) {
+        throw new Error("Ngày đóng tiếp theo không hợp lệ.");
+    }
+    const db = getDb();
+    const result = db
+        .prepare(`
+      UPDATE installments
+      SET
+        payment_day = ?,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `)
+        .run(normalizedPaymentDate.value, installmentId);
+    if (Number(result.changes || 0) === 0) {
+        throw new Error("Không thể cập nhật ngày đóng tiếp theo.");
     }
     return getInstallmentById(installmentId);
 }

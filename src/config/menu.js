@@ -1,4 +1,4 @@
-"use strict";
+﻿"use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.appNavItems = void 0;
 exports.findMenuLink = findMenuLink;
@@ -15,9 +15,9 @@ exports.appNavItems = [
                 icon: "flaticon-list-3"
             },
             {
-                label: "Thêm mới",
-                href: "/Installment/Create",
-                icon: "flaticon-add"
+                label: "Lịch thanh toán",
+                href: "/Calendar/Installment",
+                icon: "flaticon-calendar"
             }
         ]
     },
@@ -88,3 +88,4 @@ function findMenuLink(menus, controller, action) {
     }
     return null;
 }
+

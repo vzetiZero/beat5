@@ -113,7 +113,7 @@ async function fetchRemotePage(pathname, user) {
     const response = await remoteFetch(new URL(pathname, SITE_ORIGIN).toString(), user);
     const html = await response.text();
     const $ = (0, cheerio_1.load)(html);
-    const title = $(".m-subheader__title").first().text().trim() || $("title").text().trim() || "2Gold";
+    const title = $(".m-subheader__title").first().text().trim() || $("title").text().trim() || "Beat5";
     const subheaderHtml = $(".m-subheader").first().toString();
     const contentHtml = $(".m-content").first().toString();
     const hiddenInputsHtml = $("body input[type='hidden']")

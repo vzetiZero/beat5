@@ -18,46 +18,61 @@
       <div class="m-login__container app-login__card" style="max-width: 430px;">
         <div class="m-login__signin">
           <div class="m-login__head">
-            <h3 class="m-login__title">Đăng nhập vào hệ thống</h3>
-            <div class="app-login__subtitle">Xác thực trực tiếp với 2gold.biz</div>
+            <div class="app-login__brand">
+              <img class="app-login__brand-logo" src="/public/assets/beat5-logo.jpg" alt="Beat5">
+              <div class="app-login__brand-copy">
+                <div class="app-login__brand-name">Beat5</div>
+                <div class="app-login__subtitle">Dang nhap vao he thong</div>
+              </div>
+            </div>
           </div>
 
           <% if (isLoginError) { %>
             <div class="alert alert-danger fade show app-login__alert" role="alert">
-              <strong><%= flashMessage.title || "Đăng nhập thất bại" %></strong>
-              <div style="margin-top: 4px;"><%= flashMessage.text || "Tài khoản hoặc mật khẩu không đúng." %></div>
+              <strong><%= flashMessage.title || "Dang nhap that bai" %></strong>
+              <div style="margin-top: 4px;"><%= flashMessage.text || "Tai khoan hoac mat khau khong dung." %></div>
             </div>
           <% } %>
 
           <% if (isLoginWarning) { %>
             <div class="alert alert-warning fade show app-login__alert" role="alert">
-              <strong><%= flashMessage.title || "Cần chú ý" %></strong>
+              <strong><%= flashMessage.title || "Can chu y" %></strong>
               <div style="margin-top: 4px;"><%= flashMessage.text || "" %></div>
             </div>
           <% } %>
 
           <form id="loginForm" class="m-login__form m-form" action="/login" method="post" novalidate>
             <div class="form-group m-form__group">
+              <div class="app-login__field-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0 2c-4.4 0-8 2.2-8 5v1h16v-1c0-2.8-3.6-5-8-5Z"></path>
+                </svg>
+              </div>
               <input
                 id="loginUsername"
                 class="form-control m-input app-login__input"
                 type="text"
-                placeholder="Tên đăng nhập"
+                placeholder="Ten dang nhap"
                 name="Username"
                 autocomplete="username"
                 value="<%= rememberedUsername %>"
                 required
               >
-              <div class="invalid-feedback app-login__feedback">Vui lòng nhập tên đăng nhập.</div>
+              <div class="invalid-feedback app-login__feedback">Vui long nhap ten dang nhap.</div>
             </div>
 
             <div class="form-group m-form__group">
               <div class="app-login__password-group">
+                <div class="app-login__field-icon app-login__field-icon--password" aria-hidden="true">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M17 10V8a5 5 0 1 0-10 0v2H5v10h14V10h-2Zm-8 0V8a3 3 0 1 1 6 0v2H9Zm3 3a2 2 0 0 1 1 3.7V18h-2v-1.3A2 2 0 0 1 12 13Z"></path>
+                  </svg>
+                </div>
                 <input
                   id="loginPassword"
                   class="form-control m-input app-login__input app-login__password-input"
                   type="password"
-                  placeholder="Mật khẩu"
+                  placeholder="Mat khau"
                   name="Password"
                   autocomplete="current-password"
                   required
@@ -66,7 +81,7 @@
                   id="togglePasswordBtn"
                   class="app-login__toggle-password"
                   type="button"
-                  aria-label="Hiện mật khẩu"
+                  aria-label="Hien mat khau"
                   aria-pressed="false"
                 >
                   <svg id="togglePasswordOpen" class="app-login__eye-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -77,14 +92,14 @@
                   </svg>
                 </button>
               </div>
-              <div id="loginPasswordError" class="invalid-feedback app-login__feedback">Vui lòng nhập mật khẩu.</div>
+              <div id="loginPasswordError" class="invalid-feedback app-login__feedback">Vui long nhap mat khau.</div>
             </div>
 
             <div class="row m-login__form-sub">
               <div class="col m--align-left m-login__form-left">
                 <label class="m-checkbox m-checkbox--focus">
                   <input type="checkbox" name="Remember">
-                  Ghi nhớ đăng nhập
+                  Ghi nho dang nhap
                   <span></span>
                 </label>
               </div>
@@ -96,7 +111,7 @@
                 class="btn btn-mecash m-btn m-btn--pill m-btn--custom m-btn--air m-login__btn m-login__btn--primary"
                 type="submit"
               >
-                Đăng nhập
+                Dang nhap
               </button>
             </div>
           </form>
@@ -120,13 +135,53 @@
     margin-bottom: 18px;
   }
 
+  .app-login-page .app-login__brand {
+    align-items: center;
+    display: flex;
+    gap: 14px;
+    justify-content: center;
+    margin-bottom: 18px;
+  }
+
+  .app-login-page .app-login__brand-logo {
+    border: 3px solid rgba(255, 255, 255, 0.92);
+    border-radius: 20px;
+    box-shadow: 0 14px 32px rgba(228, 72, 111, 0.28);
+    height: 74px;
+    object-fit: cover;
+    width: 74px;
+  }
+
+  .app-login-page .app-login__brand-copy {
+    text-align: left;
+  }
+
+  .app-login-page .app-login__brand-name {
+    color: #111827;
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    line-height: 1.1;
+  }
+
+  .app-login-page .app-login__subtitle {
+    color: #6b7280;
+    font-size: 13px;
+    font-weight: 600;
+    margin-top: 4px;
+  }
+
+  .app-login-page .m-form__group {
+    position: relative;
+  }
+
   .app-login-page .app-login__input {
     background: #fff !important;
     border: 1px solid #d7deea !important;
     border-radius: 14px !important;
     box-sizing: border-box !important;
     min-height: 48px !important;
-    padding: 0 16px !important;
+    padding: 0 16px 0 48px !important;
     transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
     width: 100% !important;
   }
@@ -134,6 +189,26 @@
   .app-login-page .app-login__input:focus {
     border-color: #5b78ff !important;
     box-shadow: 0 0 0 0.2rem rgba(91, 120, 255, 0.15) !important;
+  }
+
+  .app-login-page .app-login__field-icon {
+    align-items: center;
+    color: #ef476f;
+    display: inline-flex;
+    height: 20px;
+    justify-content: center;
+    left: 16px;
+    pointer-events: none;
+    position: absolute;
+    top: 14px;
+    width: 20px;
+    z-index: 2;
+  }
+
+  .app-login-page .app-login__field-icon svg {
+    fill: currentColor;
+    height: 20px;
+    width: 20px;
   }
 
   .app-login-page .app-login__password-group {
@@ -218,7 +293,7 @@
       var isVisible = passwordInput.type === "text";
       togglePasswordOpen.style.display = isVisible ? "none" : "block";
       togglePasswordClosed.style.display = isVisible ? "block" : "none";
-      togglePasswordBtn.setAttribute("aria-label", isVisible ? "Ẩn mật khẩu" : "Hiện mật khẩu");
+      togglePasswordBtn.setAttribute("aria-label", isVisible ? "An mat khau" : "Hien mat khau");
       togglePasswordBtn.setAttribute("aria-pressed", isVisible ? "true" : "false");
     }
 
@@ -261,8 +336,8 @@
   <script>
     window.__FLASH__ = <%- JSON.stringify({
       type: flashMessage.type || "success",
-      title: flashMessage.title || "Đăng xuất thành công",
-      text: flashMessage.text || "Bạn đã đăng xuất khỏi hệ thống.",
+      title: flashMessage.title || "Dang xuat thanh cong",
+      text: flashMessage.text || "Ban da dang xuat khoi he thong.",
       mode: "toast"
     }) %>;
   </script>

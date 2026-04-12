@@ -6,193 +6,585 @@
     <%- include("components/sidebar", { navItems, activePath }) %>
     <div class="m-grid__item m-grid__item--fluid m-wrapper">
       <%- include("components/auth-context") %>
-      <%- include("components/subheader", { title: "Trả góp", subtitle: "Danh sách nội bộ, thống kê tổng quan, nhập Excel và quản lý hợp đồng" }) %>
+      <% const isCalendarPage = installmentPageMode === "calendar"; %>
+      <% const subheaderTitle = isCalendarPage ? "Lịch thanh toán" : "Trả góp"; %>
+      <% const subheaderSubtitle = installmentViewOnlyMode
+        ? "Rà giao diện HTML và popup ở chế độ view-only, chưa nối SQLite"
+        : (isCalendarPage
+          ? "Danh sách hợp đồng sắp đến hạn, đến hạn hôm nay và quá hạn thanh toán"
+          : "Danh sách hợp đồng, popup chi tiết và thao tác nhanh theo giao diện Annam"); %>
+      <%- include("components/subheader", { title: subheaderTitle, subtitle: subheaderSubtitle }) %>
 
-      <div class="m-content">
-        <div class="m-portlet installment-page">
-          <div class="m-portlet__body">
-            <div class="installment-dashboard" id="dashboardCards">
-              <div class="installment-dashboard__card">
-                <div class="installment-dashboard__label">Tổng hợp đồng</div>
-                <div class="installment-dashboard__value" id="dashboardTotalContracts"><%= bootstrap.dashboard.totalContracts %></div>
-              </div>
-              <div class="installment-dashboard__card">
-                <div class="installment-dashboard__label">Tổng gói vay</div>
-                <div class="installment-dashboard__value" id="dashboardLoanPackage"><%= Number(bootstrap.dashboard.totalLoanPackage || 0).toLocaleString("vi-VN") %> ₫</div>
-              </div>
-              <div class="installment-dashboard__card">
-                <div class="installment-dashboard__label">Tổng doanh thu</div>
-                <div class="installment-dashboard__value" id="dashboardRevenue"><%= Number(bootstrap.dashboard.totalRevenue || 0).toLocaleString("vi-VN") %> ₫</div>
-              </div>
-              <div class="installment-dashboard__card">
-                <div class="installment-dashboard__label">Tổng thực chi</div>
-                <div class="installment-dashboard__value" id="dashboardNet"><%= Number(bootstrap.dashboard.totalNetDisbursement || 0).toLocaleString("vi-VN") %> ₫</div>
-              </div>
-              <div class="installment-dashboard__card">
-                <div class="installment-dashboard__label">Đến hạn hôm nay</div>
-                <div class="installment-dashboard__value" id="dashboardDueToday"><%= bootstrap.dashboard.dueTodayCount %></div>
-              </div>
-              <div class="installment-dashboard__card">
-                <div class="installment-dashboard__label">Sắp đến hạn</div>
-                <div class="installment-dashboard__value" id="dashboardDueSoon"><%= bootstrap.dashboard.dueSoonCount || 0 %></div>
-              </div>
-              <div class="installment-dashboard__card">
-                <div class="installment-dashboard__label">Quá hạn</div>
-                <div class="installment-dashboard__value" id="dashboardOverdue"><%= bootstrap.dashboard.overdueCount || 0 %></div>
-              </div>
-              <div class="installment-dashboard__card">
-                <div class="installment-dashboard__label">Số ngày trung bình</div>
-                <div class="installment-dashboard__value" id="dashboardAverageDays"><%= Math.round(bootstrap.dashboard.averageLoanDays || 0) %></div>
+      <div class="m-content installment-annam-page <%= isCalendarPage ? 'installment-annam-page--calendar' : 'installment-annam-page--list' %>">
+        <% if (installmentViewOnlyMode) { %>
+          <div class="alert alert-warning installment-annam-viewonly-banner" role="alert">
+            Chế độ giao diện tĩnh đang bật cho mục Trả góp. Dữ liệu trên trang và popup đang dùng mock để rà giao diện, chưa đọc/ghi SQLite.
+          </div>
+        <% } %>
+        <% if (isCalendarPage) { %>
+          <div class="alert alert-info installment-annam-calendar-banner" role="alert">
+            Theo dõi các hợp đồng đến hạn thanh toán tại một màn riêng. Danh sách này tự động lọc các hợp đồng <b>sắp đến hạn</b>, <b>đến hạn hôm nay</b> và <b>quá hạn</b>.
+          </div>
+        <% } %>
+
+        <div class="m-portlet m-portlet--mobile">
+          <div class="m-portlet__head">
+            <div class="m-portlet__head-caption">
+              <div class="m-portlet__head-title">
+                <h3 class="m-portlet__head-text"><%= isCalendarPage ? "Hợp đồng đến hạn thanh toán" : "Hợp đồng Trả góp" %></h3>
               </div>
             </div>
-
-            <div class="installment-toolbar">
-              <div class="installment-toolbar__group installment-toolbar__group--grow">
-                <div class="installment-quick-filters" id="dueQuickFilters">
-                  <button class="btn btn-sm btn-outline-secondary is-active" type="button" data-due-filter="">Tất cả</button>
-                  <button class="btn btn-sm btn-outline-secondary" type="button" data-due-filter="due_soon">Sắp đến hạn</button>
-                  <button class="btn btn-sm btn-outline-secondary" type="button" data-due-filter="due_today">Đến hạn hôm nay</button>
-                  <button class="btn btn-sm btn-outline-secondary" type="button" data-due-filter="overdue">Quá hạn</button>
+          </div>
+          <div class="m-portlet__body">
+            <div class="row">
+              <div class="col-lg-12 col-xl-12 col-sm-12 col-12">
+                <div class="card installment-annam-cards">
+                  <div class="row clearfix text-center">
+                    <div class="m--margin-top-10 col-md-6" id="dvMoneyEndDate">
+                      <div class="body bg-info text-light installment-annam-card installment-annam-card--cash">
+                        <div>QUỸ TIỀN MẶT <a class="installment-annam-reload" id="dashboardReloadLink" style="cursor:pointer;"><i class="flaticon-share m--font-danger" title="Reload dữ liệu"></i></a></div>
+                        <h4 id="lbl_LoanPawn_MoneyEndDate">0</h4>
+                      </div>
+                    </div>
+                    <div class="m--margin-top-10 col-md-6" id="dvMoneyInvestment">
+                      <div class="body bg-info text-light installment-annam-card installment-annam-card--loan">
+                        <span>TIỀN CHO VAY</span>
+                        <h4 id="lbl_LoanPawn_MoneyInvestment">0</h4>
+                      </div>
+                    </div>
+                    <div class="m--margin-top-10 col-md-4" id="dvInterestExpected">
+                      <div class="body m--bg-brand text-light installment-annam-card installment-annam-card--revenue">
+                        <span>LÃI DỰ KIẾN</span>
+                        <h4 id="lbl_LoanPawn_InterestExpected">0</h4>
+                      </div>
+                    </div>
+                    <div class="m--margin-top-10 col-md-4" id="dvInterestEarned">
+                      <div class="body bg-success text-light installment-annam-card installment-annam-card--paid">
+                        <span>LÃI ĐÃ THU</span>
+                        <h4 id="lbl_LoanPawn_InterestEarned">0</h4>
+                      </div>
+                    </div>
+                    <div class="m--margin-top-10 col-md-4" id="dvContractSummary">
+                      <div class="body bg-success text-light installment-annam-card installment-annam-card--contract">
+                        <span>TỔNG HỢP ĐỒNG</span>
+                        <h4 id="lbl_LoanPawn_TotalContracts">0</h4>
+                      </div>
+                    </div>
+                  </div>
                 </div>
+              </div>
 
-                <label class="installment-field">
-                  <span class="installment-field__label">Tìm kiếm</span>
-                  <input id="generalSearch" class="form-control m-input" type="text" placeholder="Mã KH, tên khách, IMEI, ghi chú, MC...">
-                </label>
+              <div class="col-lg-12 col-xl-12 col-sm-12 col-12 m--align-left m--margin-top-10 installment-annam-toolbar">
+                <% if (!isCalendarPage) { %>
+                  <button class="btn btn-accent m-btn m-btn--custom m-btn--icon m-btn--air btn-sm" id="btnModalCreate" type="button">
+                    <span>Thêm mới</span>
+                  </button>
+                <% } else { %>
+                  <a class="btn btn-secondary m-btn m-btn--custom m-btn--icon m-btn--air btn-sm" href="/Installment/Index/">
+                    <span>Xem toàn bộ hợp đồng</span>
+                  </a>
+                <% } %>
+                <button class="btn btn-success m-btn m-btn--custom m-btn--icon m-btn--air btn-sm" type="button" id="btnExportVisible">Xuất CSV</button>
+                <% if (canImportInstallment && !isCalendarPage) { %>
+                  <button class="btn btn-addNew m-btn m-btn--custom m-btn--icon m-btn--air btn-sm" type="button" id="btnImportExcel">Thêm DL Mới Excel</button>
+                <% } %>
+                <% if (canSelectShop) { %>
+                  <button class="btn btn-secondary m-btn m-btn--custom m-btn--icon m-btn--air btn-sm" type="button" id="btnViewAllShops">Tất cả cửa hàng</button>
+                <% } %>
+                <button class="btn btn-warning m-btn m-btn--custom m-btn--icon m-btn--air btn-sm" type="button" id="btnTomorrowDueCheck" title="Xem các hợp đồng đến kỳ thanh toán ngày mai">
+                  <span><i class="fa fa-calendar-plus-o"></i><span><%= isCalendarPage ? 'Ngày Mai' : 'Kiểm tra ngày mai' %></span></span>
+                </button>
+                <input id="excelFileInput" type="file" accept=".xlsx,.xls,.csv" hidden>
+              </div>
 
-                <label class="installment-field">
-                  <span class="installment-field__label">Cửa hàng</span>
-                  <select id="shopFilter" class="form-control m-input" <%= canSelectShop ? '' : 'disabled' %>>
-                    <option value="0">Tất cả</option>
-                    <% shopOptions.forEach((shop) => { %>
-                      <option value="<%= shop.id %>" <%= defaultShopId === shop.id ? 'selected' : '' %>><%= shop.name %></option>
-                    <% }) %>
-                  </select>
-                </label>
+              <div class="col-lg-2 col-xl-2 col-sm-6 col-12 m--margin-top-10">
+                <div class="m-input-icon m-input-icon--right">
+                  <input class="form-control m-input" id="generalSearch" placeholder="Tìm kiếm mã HĐ, Tên KH..." type="text">
+                  <span class="m-input-icon__icon m-input-icon__icon--right"><span><i class="la la-search"></i></span></span>
+                </div>
+              </div>
 
-                <label class="installment-field">
-                  <span class="installment-field__label">Tình trạng</span>
-                  <select id="statusFilter" class="form-control m-input">
-                    <option value="0">Tất cả</option>
-                    <% bootstrap.availableStatuses.forEach((status) => { %>
-                      <option value="<%= status.code %>"><%= status.label %></option>
-                    <% }) %>
-                  </select>
-                </label>
+              <div class="col-lg-2 col-xl-2 col-sm-6 col-6 m--margin-top-10 installment-annam-filter-date">
+                <div class="m-input-icon m-input-icon--right">
+                  <input type="date" class="form-control m-input" id="txtFromDate" placeholder="Từ ngày">
+                  <span class="m-input-icon__icon m-input-icon__icon--right"><span><i class="la la-calendar text-black"></i></span></span>
+                </div>
+              </div>
 
-                <label class="installment-field">
-                  <span class="installment-field__label">Từ ngày</span>
-                  <input id="fromDate" class="form-control m-input" type="date">
-                </label>
+              <div class="col-lg-2 col-xl-2 col-sm-6 col-6 m--margin-top-10 installment-annam-filter-date">
+                <div class="m-input-icon m-input-icon--right">
+                  <input type="date" class="form-control m-input" id="txtToDate" placeholder="Đến ngày">
+                  <span class="m-input-icon__icon m-input-icon__icon--right"><span><i class="la la-calendar text-black"></i></span></span>
+                </div>
+              </div>
 
-                <label class="installment-field">
-                  <span class="installment-field__label">Đến ngày</span>
-                  <input id="toDate" class="form-control m-input" type="date">
-                </label>
-
-                <label class="installment-field">
-                  <span class="installment-field__label">Số ngày</span>
-                  <select id="loanTimeFilter" class="form-control m-input">
-                    <option value="0">Tất cả</option>
+              <div class="col-lg-2 col-xl-2 col-sm-6 col-6 m--margin-top-10">
+                <div class="dropdown-container">
+                  <select class="custom-select" id="m-search-loanTime">
+                    <option value="0">Tất cả ngày</option>
                     <% bootstrap.availableLoanDays.forEach((loanDay) => { %>
                       <option value="<%= loanDay %>"><%= loanDay %> ngày</option>
                     <% }) %>
                   </select>
-                </label>
+                </div>
+              </div>
 
-                <label class="installment-field installment-field--small">
-                  <span class="installment-field__label">Mỗi trang</span>
-                  <select id="perPageFilter" class="form-control m-input">
-                    <option value="25">25</option>
-                    <option value="50" selected>50</option>
-                    <option value="100">100</option>
+              <div class="col-lg-2 col-xl-2 col-sm-6 col-6 m--margin-top-10">
+                <div class="dropdown-container">
+                  <select class="custom-select" id="m-search-status">
+                    <option value="0">Tất cả hợp đồng</option>
+                    <% bootstrap.availableStatuses.forEach((status) => { %>
+                      <option value="<%= status.code %>"><%= status.label %></option>
+                    <% }) %>
                   </select>
-                </label>
+                </div>
               </div>
 
-              <div class="installment-toolbar__group">
-                <% if (canSelectShop) { %>
-                  <button id="btnViewAllShops" class="btn btn-outline-secondary" type="button">Xem tất cả</button>
+              <div class="col-lg-2 col-xl-2 col-sm-6 col-12 m--margin-top-10">
+                <div class="dropdown-container">
+                  <select class="custom-select" id="shopFilter" <%= canSelectShop ? '' : 'disabled' %>>
+                    <option value="0">Tất cả cửa hàng</option>
+                    <% shopOptions.forEach((shop) => { %>
+                      <option value="<%= shop.id %>" <%= defaultShopId === shop.id ? 'selected' : '' %>><%= shop.name %></option>
+                    <% }) %>
+                  </select>
+                </div>
+              </div>
+
+              <div class="col-lg-1 col-xl-1 col-sm-6 col-6 m--margin-top-10">
+                <button class="btn btn-info m-btn m-btn--air installment-annam-action-btn" id="btnGetData" type="button">
+                  <span><i class="fa fa-search"></i><span>Tìm kiếm</span></span>
+                </button>
+              </div>
+
+              <div class="col-lg-1 col-xl-1 col-sm-6 col-6 m--margin-top-10">
+                <button class="btn btn-secondary m-btn m-btn--air installment-annam-action-btn" id="btnResetSearch" type="button">
+                  <span><i class="fa fa-refresh"></i><span>Reset</span></span>
+                </button>
+              </div>
+              <div class="col-md-12 m--margin-top-10">
+                <div class="installment-annam-status-row" id="installmentStatusSummary">
+                  <% bootstrap.statusSummary.forEach((item) => { %>
+                    <span class="m-badge m-badge--wide installment-annam-summary-pill"><%= item.statusText %>: <b><%= item.count %></b></span>
+                  <% }) %>
+                </div>
+              </div>
+
+              <div class="col-md-12 m--margin-top-10">
+                <div class="installment-annam-scroll-hint">Kéo thanh cuộn ngang bên dưới để xem thêm cột khi bảng quá rộng.</div>
+                <div id="dtInstallment" class="installment-annam-table-wrap <%= isCalendarPage ? 'installment-annam-table-wrap--calendar' : '' %>">
+                  <div class="m_datatable m-datatable m-datatable--default table table-bordered table-hover m-datatable--loaded">
+                    <table class="m-datatable__table installment-annam-table <%= isCalendarPage ? 'installment-annam-table--calendar' : '' %>">
+                      <thead class="m-datatable__head">
+                        <tr class="m-datatable__row">
+                          <th data-sort="rowNumber" class="m-datatable__cell--center m-datatable__cell"><span style="width: 40px;">#</span></th>
+                          <th data-sort="contractCode" class="m-datatable__cell"><span style="width: 90px;">Mã HĐ</span></th>
+                          <th data-sort="customerRef" class="m-datatable__cell"><span style="width: 170px;">Khách hàng</span></th>
+                          <th data-sort="loanPackage" class="m-datatable__cell--right m-datatable__cell"><span style="width: 120px;">Tiền giao khách</span></th>
+                          <th data-sort="installerName" class="m-datatable__cell--left m-datatable__cell"><span style="width: 120px;">Nhân Viên</span></th>
+                          <th data-sort="loanDate" class="m-datatable__cell--center m-datatable__cell"><span style="width: 150px;">Thời gian</span></th>
+                          <th data-sort="paidBefore" class="m-datatable__cell--right m-datatable__cell"><span style="width: 120px;">Tiền đã đóng</span></th>
+                          <th data-sort="installmentAmount" class="m-datatable__cell--right m-datatable__cell"><span style="width: 100px;">Tiền 1 kỳ</span></th>
+                          <th data-sort="remainingMoney" class="m-datatable__cell--right m-datatable__cell"><span style="width: 120px;">Còn phải đóng</span></th>
+                          <th data-sort="statusText" class="m-datatable__cell--center m-datatable__cell"><span style="width: 110px;">Tình trạng</span></th>
+                          <th data-sort="paymentDay" class="m-datatable__cell--center m-datatable__cell"><span style="width: 100px;">Ngày phải đóng</span></th>
+                          <th class="m-datatable__cell"><span style="width: 190px;">Chức năng</span></th>
+                        </tr>
+                      </thead>
+                      <tbody class="m-datatable__body" id="installmentTableBody">
+                        <tr class="m-datatable__row"><td colspan="12" class="installment-annam-empty">Đang tải dữ liệu...</td></tr>
+                      </tbody>
+                    </table>
+                    <div class="m-datatable__pager m-datatable--paging-loaded clearfix">
+                      <ul class="m-datatable__pager-nav" id="installmentPagination"></ul>
+                      <div class="m-datatable__pager-info">
+                        <div class="btn-group bootstrap-select m-datatable__pager-size installment-annam-pager-size">
+                          <select class="selectpicker m-datatable__pager-size" id="perPageFilter" title="Select page size" data-width="70px">
+                            <option value="10">10</option>
+                            <option value="20">20</option>
+                            <option value="30">30</option>
+                            <option value="50" selected>50</option>
+                            <option value="100">100</option>
+                          </select>
+                        </div>
+                        <span class="m-datatable__pager-detail" id="installmentPagerDetail">Tổng số 0 bản ghi - Trang 0/0</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <% if (isCalendarPage) { %>
+                  <div class="installment-annam-calendar-footnote">
+                    Màn này đang dùng cùng popup `Đóng tiền`, `Cập nhật ngày đóng`, `Sửa hợp đồng` và `Xóa` như danh sách Trả góp để giữ một luồng CRUD thống nhất.
+                  </div>
                 <% } %>
-                <% if (canCreateInstallment) { %>
-                  <a id="btnCreateInstallment" href="/Installment/Create" class="btn btn-accent">Thêm mới</a>
-                <% } %>
-                <button id="btnReloadData" class="btn btn-secondary" type="button">Lấy dữ liệu</button>
-                <% if (canImportInstallment) { %>
-                  <button id="btnImportExcel" class="btn btn-brand" type="button">Nhập Excel</button>
-                <% } %>
-                <input id="excelFileInput" type="file" accept=".xlsx,.xls,.csv" hidden>
               </div>
             </div>
+          </div>
+        </div>
 
-            <div class="installment-status-summary" id="statusSummary">
-              <% bootstrap.statusSummary.forEach((item) => { %>
-                <span class="installment-status-pill"><%= item.statusText %>: <b><%= item.count %></b></span>
-              <% }) %>
+        <div class="modal fade" id="modal_details_pawn" tabindex="-1" role="dialog" aria-hidden="true">
+          <div class="modal-dialog modal-xl" role="document">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title" id="model_pawn_header">Bảng chi tiết Hợp đồng</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close" id="btnCloseModalPawn"><span aria-hidden="true">×</span></button>
+              </div>
+              <div class="modal-body">
+                <input type="hidden" id="hddLoanID" value="">
+                <input type="hidden" id="hddCustomerID" value="">
+                <input type="hidden" id="hddTotalMoneyCurrent" value="">
+                <input type="hidden" name="hddNotePayment" id="hddNotePayment" value="0">
+                <div class="m-form m-form--fit m-form--label-align-right">
+                  <div class="m-portlet__body">
+                    <div class="row">
+                      <div class="col-md-6">
+                        <table class="table table-hover table-bordered">
+                          <tbody>
+                            <tr id="trCusName">
+                              <td colspan="3">
+                                <span class="text-danger font-weight-bold" id="lblCusName"></span> <span id="lblCusPhone"></span>
+                                <span id="lblCusAddress"></span>
+                                <span id="lblAff"></span>
+                              </td>
+                            </tr>
+                            <tr><td><span class="font-weight-bold">Trả Góp</span></td><td colspan="2" align="right"><span id="lblTotalMoney"></span> VNĐ</td></tr>
+                            <tr><td><span class="font-weight-bold">Nhân Viên</span></td><td colspan="2" align="right"><span id="lblStrRate"></span></td></tr>
+                            <tr><td><span class="font-weight-bold">Họ từ ngày</span></td><td align="right"><span id="lblFromDate"></span></td><td align="right"><span id="lblToDate"></span></td></tr>
+                            <tr><td><span class="font-weight-bold">Trạng thái</span></td><td colspan="2" align="right"><span id="lblStatus"></span></td></tr>
+                          </tbody>
+                        </table>
+                      </div>
+                      <div class="col-md-6">
+                        <table class="table table-hover table-bordered">
+                          <tbody>
+                            <tr><td><span class="font-weight-bold">Số tiền giao khách</span></td><td colspan="2" align="right"><span id="lblTotalMoneyReceived"></span> VNĐ</td></tr>
+                            <tr><td><span class="font-weight-bold">Tổng tiền phải đóng</span></td><td colspan="2" align="right"><span id="lblTotalMoneyPayment" class="text-danger font-weight-bold"></span> VNĐ</td></tr>
+                            <tr><td><span class="font-weight-bold">Đã đóng được</span></td><td colspan="2" align="right"><span id="lblPaymentMoney"></span> VNĐ</td></tr>
+                            <tr><td><span class="font-weight-bold">Còn lại phải đóng</span></td><td colspan="2" align="right"><span id="lblTotalMoneyCurrent" class="text-danger font-weight-bold"></span> VNĐ</td></tr>
+                            <tr><td><span class="font-weight-bold">Tổng lãi</span></td><td colspan="2" align="right"><span id="lblTotalInterest"></span> VNĐ</td></tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    <div class="row">
+                      <div class="col-md-12">
+                        <div class="m-portlet__head">
+                          <div class="m-portlet__head-tools">
+                            <ul class="nav nav-tabs m-tabs-line m-tabs-line--primary m-tabs-line--2x" id="tabs" role="tablist">
+                              <li class="nav-item m-tabs__item" id="item_donglai"><a class="nav-link m-tabs__link active" data-toggle="tab" href="#m_tab_lichdongtien"><i class="la la-money"></i>Lịch đóng tiền</a></li>
+                              <li class="nav-item m-tabs__item m-nav" id="item_chuocdo"><a class="nav-link m-tabs__link" data-toggle="tab" href="#m_tab_donghopdongvayho"><i class="fa fa-money"></i>Đóng HĐ</a></li>
+                              <li class="nav-item m-tabs__item m-nav" id="item_denhan"><a class="nav-link m-tabs__link" data-toggle="tab" href="#m_tab_denhanhthanhtoan"><img src="/public/assets/pay.svg" alt="Pay" style="width:16px; height:16px; margin-right:5px; vertical-align: middle;"/>Đến Hạn Thanh Toán</a></li>
+                              <li class="nav-item m-tabs__item m-nav" id="item_lichsu"><a class="nav-link m-tabs__link" data-toggle="tab" href="#m_tab_lichsu"><i class="la la-commenting"></i>Lịch sử</a></li>
+                            </ul>
+                          </div>
+                          <div class="m-portlet__head-tools installment-annam-detail-tools">
+                            <button id="btnTomorrowInstallmentsInline" class="btn btn-warning m-btn m-btn--air" type="button" title="Xem các hợp đồng đến kỳ thanh toán ngày mai">
+                              <i class="fa fa-calendar-plus-o"></i>
+                              <span>Ngày Mai</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="tab-content">
+                      <div class="tab-pane active" id="m_tab_lichdongtien">
+                        <br>
+                        <div><i class="m-portlet__head-text"><i class="fa fa-align-justify"></i> Lịch đóng tiền</i></div>
+                        <div class="m-form__seperator m-form__seperator--dashed m-form__seperator--space"></div>
+                        <div class="installment-annam-inline-note">Lưu ý: Đối với điện thoại iOS, vui lòng vuốt 2 bên lịch để xem đầy đủ.</div>
+                        <div class="table-responsive">
+                          <table id="tbl_DongTien_list" class="table table-bordered m-table m-table--head-bg-gray table-hover">
+                            <thead>
+                              <tr>
+                                <th width="80px" class="text-center">STT</th>
+                                <th colspan="3" class="text-center">Ngày</th>
+                                <th width="150px" class="text-center">Tiền họ</th>
+                                <th class="text-center" style="padding:0 40px 10px;">Ngày giao dịch</th>
+                                <th class="text-center" style="padding:0 40px 10px;">Tiền Còn Phải Đóng</th>
+                                <th class="text-center"></th>
+                                <th class="text-center">Trạng Thái</th>
+                              </tr>
+                            </thead>
+                            <tbody></tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      <div class="tab-pane" id="m_tab_donghopdongvayho">
+                        <div class="row">
+                          <div class="col-lg-12 col-sm-12 col-12 col-form-label font-weight-bold" id="dvDone" style="display:none;">Hợp đồng này đã hoàn thành. Bạn có thể đánh dấu đóng hợp đồng.</div>
+                          <div class="col-lg-9" id="dvPending"><span class="font-weight-bold">Chú ý:</span><br>Số tiền còn phải đóng:&nbsp;&nbsp;<span class="text-danger font-weight-bold"><label id="lblDongHD_TotalMoneyCurrent">0</label> VNĐ</span><br></div>
+                          <div class="col-lg-12 col-sm-12 col-12 col-form-label font-weight-bold"><button type="button" id="btnDongHopDongVayHo" class="btn btn-sm btn-primary m-btn--air btn-secondary"><i class="fa fa-check"></i> Đóng hợp đồng</button></div>
+                        </div>
+                      </div>
+
+                      <div class="tab-pane" id="m_tab_lichsu">
+                        <h6><i class="m-portlet__head-text"><i class="fa fa-history"></i> Lịch sử hợp đồng</i></h6>
+                        <div class="m-form__seperator m-form__seperator--dashed m-form__seperator--space"></div>
+                        <div class="table-responsive">
+                          <table class="table table-bordered table-hover">
+                            <thead><tr><th>Thời gian</th><th>Người thao tác</th><th>Hành động</th><th>Ghi chú</th></tr></thead>
+                            <tbody id="installmentHistoryTableBody"></tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      <div class="tab-pane" id="m_tab_denhanhthanhtoan">
+                        <br>
+                        <div><i class="m-portlet__head-text"><i class="fa fa-calendar"></i> Đến Hạn Thanh Toán</i></div>
+                        <div class="m-form__seperator m-form__seperator--dashed m-form__seperator--space"></div>
+                        <div class="alert alert-info" role="alert">
+                          <i class="la la-info-circle"></i> Danh sách các hợp đồng sắp đến hạn thanh toán hoặc đã quá hạn.
+                        </div>
+                        <div class="table-responsive">
+                          <table id="tbl_DuePayment_list" class="table table-bordered m-table m-table--head-bg-gray table-hover">
+                            <thead>
+                              <tr>
+                                <th width="80px" class="text-center">STT</th>
+                                <th class="text-center">Mã HĐ</th>
+                                <th class="text-center">Khách hàng</th>
+                                <th class="text-center">Ngày đến hạn</th>
+                                <th class="text-center">Tiền còn phải đóng</th>
+                                <th class="text-center">Trạng thái</th>
+                                <th class="text-center">Thao tác</th>
+                              </tr>
+                            </thead>
+                            <tbody id="duePmentTableBody">
+                              <tr><td colspan="7" class="text-center">Đang tải dữ liệu...</td></tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
+          </div>
+        </div>
 
-            <div class="installment-summary" id="summaryCards">
-              <div class="installment-summary__card">
-                <div class="installment-summary__label">Số dòng lọc</div>
-                <div class="installment-summary__value" id="summaryCount">0</div>
+        <div class="modal fade" id="modal_change_nextDate" tabindex="-1" role="dialog" aria-hidden="true">
+          <input type="hidden" id="hddUpdateNextDate_LoanID" value="">
+          <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title"><b>Hẹn lại ngày khách trả</b></h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close" id="btnCloseChangeNextDate"><span aria-hidden="true">×</span></button>
               </div>
-              <div class="installment-summary__card">
-                <div class="installment-summary__label">Doanh thu</div>
-                <div class="installment-summary__value" id="summaryRevenue">0 ₫</div>
+              <form>
+                <div class="modal-body">
+                  <div class="col-lg-12 form-group m-form__group row">
+                    <label class="col-lg-4 col-form-label" style="text-align:right">Chọn ngày <span class="text-danger">*</span></label>
+                    <div class="col-lg-6"><div class="input-group m-input-group"><input type="date" class="form-control m-input" id="txtUpdate_NextDate" name="txtUpdate_NextDate"><span class="input-group-addon"><i class="la la-calendar text-black"></i></span></div></div>
+                  </div>
+                  <div class="col-lg-12 form-group m-form__group row"><div class="col-lg-4"></div><div class="col-lg-8"><button type="button" class="btn m-btn btn-primary" id="btnUpdateNextDate">Lưu thay đổi</button></div></div>
+                  <hr>
+                  <i class="m-portlet__head-text"><i class="fa fa-align-justify"></i> Lịch sử thay đổi</i>
+                  <div id="dv_history_changeNextDate" class="installment-annam-nextdate-history">
+                    <table class="table table-bordered table-hover m--margin-top-15">
+                      <thead><tr><th>Thời gian</th><th>Người thao tác</th><th>Hành động</th><th>Ghi chú</th></tr></thead>
+                      <tbody id="nextDateHistoryTableBody"></tbody>
+                    </table>
+                  </div>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal fade" id="modal_create_pawn" tabindex="-1" role="dialog" aria-hidden="true">
+          <div class="modal-dialog modal-xl" role="document">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title" id="titleFormPawn">Thêm mới Hợp đồng</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close" id="btnCloseCreatePopup"><span aria-hidden="true">×</span></button>
               </div>
-              <div class="installment-summary__card">
-                <div class="installment-summary__label">Thực chi</div>
-                <div class="installment-summary__value" id="summaryNet">0 ₫</div>
-              </div>
-              <div class="installment-summary__card">
-                <div class="installment-summary__label">Đóng trước</div>
-                <div class="installment-summary__value" id="summaryPaidBefore">0 ₫</div>
-              </div>
-              <div class="installment-summary__card">
-                <div class="installment-summary__label">Tiền đóng</div>
-                <div class="installment-summary__value" id="summaryInstallment">0 ₫</div>
+              <div class="modal-body">
+                <div class="m-form m-form--fit m-form--label-align-right">
+                  <div class="m-portlet__body">
+                    <form class="m-form m-form--fit m-form--label-align-right" id="installmentCreateForm">
+                      <input type="hidden" id="hfId" name="Id" value="0">
+                      <input type="hidden" id="TypeId" value="2">
+                      <input type="hidden" id="hdd_editLoan" value="0">
+                      <div class="m-portlet__body">
+                        <div class="form-group m-form__group row">
+                          <label class="col-lg-3 col-sm-12 col-12 col-form-label font-weight-bold">Cửa hàng <span class="text-danger">*</span></label>
+                          <div class="customize-responsive col-lg-3 col-sm-12 col-12">
+                            <select class="form-control m-input" id="popupShopId" <%= canSelectShop ? '' : 'disabled' %>>
+                              <% shopOptions.forEach((shop) => { %>
+                                <option value="<%= shop.id %>" <%= defaultShopId === shop.id ? 'selected' : '' %>><%= shop.name %></option>
+                              <% }) %>
+                            </select>
+                          </div>
+                        </div>
+                        <h6><i class="m-portlet__head-text m--margin-left-30"><i class="fa fa-user"></i> Thông tin khách hàng</i></h6>
+                        <div class="m-form__seperator m-form__seperator--dashed m-form__seperator--space"></div>
+
+                        <div class="form-group m-form__group row">
+                          <label class="col-lg-3 col-sm-12 col-12 col-form-label font-weight-bold">Tên Khách hàng <span class="text-danger">*</span></label>
+                          <div class="customize-responsive col-lg-3 col-sm-12 col-12" id="dv_oldContractCustomerName">
+                            <div style="position: relative;" id="customer-container">
+                              <div id="customername-container"></div>
+                              <div class="m-typeahead"><input type="text" class="form-control m-input" id="txtCustomer" name="txtCustomer" placeholder="Nhập Tên Khách Hàng" autofocus></div>
+                              <div id="btnCustomer"></div>
+                              <input type="hidden" id="hfCustomer" name="CustomerId" value="0">
+                              <input type="hidden" id="hfCustomerPhone" name="CustomerPhone">
+                              <input type="hidden" id="hfCustomerName" name="CustomerName">
+                              <input type="hidden" id="hfCustomerNumberCard" name="NumberCard">
+                              <input type="hidden" id="hfCustomerAddress" name="CustomerAddress">
+                              <input type="hidden" id="hfCustomerCardDate" name="CustomerCardDate">
+                              <input type="hidden" id="hfCustomerPlace" name="CustomerPlace">
+                            </div>
+                          </div>
+                          <label class="col-lg-2 col-sm-12 col-12 col-form-label font-weight-bold label_right_form">Mã hợp đồng <span class="text-danger">*</span></label>
+                          <div class="customize-responsive col-lg-3 col-sm-12 col-12"><input type="number" class="form-control m-input" placeholder="Nhập mã hợp đồng..." id="txtCodeID" name="CodeId" readonly></div>
+                        </div>
+                        <h6><i class="m-portlet__head-text m--margin-left-30"><i class="fa fa-money"></i> Thông tin Trả Góp</i></h6>
+                        <div class="m-form__seperator m-form__seperator--dashed m-form__seperator--space"></div>
+
+                        <div class="form-group m-form__group row">
+                          <label class="col-lg-3 col-sm-12 col-12 col-form-label font-weight-bold">Trả Góp <span class="text-danger">*</span></label>
+                          <div class="customize-responsive col-lg-3 col-md-9 col-sm-12"><div class="input-group m-input-group"><input type="number" class="form-control m-input" id="txtTotalMoney" name="txtTotalMoney" value="0"><span class="input-group-addon"><i class="text-black">VNĐ</i></span></div></div>
+                          <div class="col-lg-6"><div class="m-radio-inline"><label class="col-form-label text-danger">(Chú ý: Trả Góp nghĩa là tổng tiền khách phải đóng)</label></div></div>
+                        </div>
+
+                        <div class="form-group m-form__group row">
+                          <label class="col-lg-3 col-sm-12 col-12 col-form-label font-weight-bold">Tiền đưa khách <span class="text-danger">*</span></label>
+                          <div class="customize-responsive col-lg-3 col-md-9 col-sm-12"><div class="input-group m-input-group"><input type="number" class="form-control m-input" id="txtTotalMoneyReceived" name="txtTotalMoneyReceived" value="0"><span class="input-group-addon"><i class="text-black">VNĐ</i></span></div></div>
+                          <div class="col-lg-3"><div class="m-radio-inline"><label class="col-form-label" id="StrExample">(Tổng tiền khách nhận được)</label></div></div>
+                        </div>
+
+                        <div class="form-group m-form__group row">
+                          <label class="col-lg-3 col-sm-12 col-12 col-form-label font-weight-bold">Hình thức <span class="text-danger">*</span></label>
+                          <div class="customize-responsive col-lg-3 col-sm-12 col-12">
+                            <div class="custom-select-wrapper" style="position: relative;">
+                              <div class="form-control custom-select-display" id="ratetype-display" style="cursor: pointer; background: white;"><span id="ratetype-selected">Theo ngày</span><i class="fa fa-chevron-down" style="float: right; margin-top: 3px;"></i></div>
+                              <div class="custom-select-dropdown" id="ratetype-dropdown">
+                                <div class="custom-select-option" data-value="0">Theo ngày</div>
+                                <div class="custom-select-option" data-value="6">Định kì theo tháng</div>
+                              </div>
+                              <input type="hidden" id="m-select-ratetype_create" name="m-select-ratetype_create" value="0">
+                            </div>
+                          </div>
+                        </div>
+
+                        <div class="form-group m-form__group row">
+                          <label class="col-lg-3 col-sm-12 col-12 col-form-label font-weight-bold">Bốc trong vòng <span class="text-danger">*</span></label>
+                          <div class="customize-responsive col-lg-3 col-sm-12 col-12"><div class="input-group m-input-group"><input type="number" class="form-control m-input" placeholder="Nhập số ngày" id="txtLoanTime" name="txtLoanTime" value="50"><span class="input-group-addon" id="lbl_loantime_icon"><i class="text-black">Ngày</i></span></div></div>
+                          <div class="col-lg-3"><div class="m-radio-inline"><label class="col-form-label"><i class="la la-arrow-right font-weight-bold" style="font-size:14px"></i> ( <span id="strMoneyOfLoanTime" class="text-danger">0</span> <span id="lbl_money_perday"> / 1 Kỳ</span> )</label></div></div>
+                        </div>
+
+                        <div class="form-group m-form__group row">
+                          <label class="col-lg-3 col-sm-12 col-12 col-form-label font-weight-bold" id="lbl_frenquency_create">Số ngày đóng tiền <span class="text-danger">*</span></label>
+                          <div class="customize-responsive col-lg-3 col-sm-12 col-12"><div class="input-group m-input-group"><input type="number" class="form-control m-input" placeholder="Nhập số ngày" id="txtFrequency" name="txtFrequency" value="1"></div></div>
+                          <div class="col-lg-3"><div class="m-radio-inline"><label class="col-form-label" id="lbl_introduce_installment">(VD: 3 ngày đóng 1 lần thì điền số 3)</label></div></div>
+                        </div>
+
+                        <div class="form-group m-form__group row">
+                          <label class="col-lg-3 col-sm-12 col-12 col-form-label font-weight-bold">Ngày bốc <span class="text-danger">*</span></label>
+                          <div class="customize-responsive col-lg-3 col-sm-12 col-12"><div class="input-group m-input-group"><input type="date" class="form-control m-input" id="txtStrFromDate" name="txtStrFromDate"><span class="input-group-addon"><i class="la la-calendar text-black"></i></span></div></div>
+                        </div>
+
+                        <div class="form-group m-form__group row">
+                          <label class="col-lg-3 col-sm-12 col-12 col-form-label font-weight-bold">Ghi chú</label>
+                          <div class="customize-responsive col-lg-3 col-sm-12 col-12"><textarea class="form-control m-input" id="txtNote" name="Note" rows="3"></textarea></div>
+                        </div>
+
+                        <div class="form-group m-form__group row">
+                          <label class="col-lg-3 col-sm-12 col-12 col-form-label font-weight-bold">NV thu tiền</label>
+                          <div class="customize-responsive col-lg-3 col-sm-12 col-12">
+                            <div class="custom-select-wrapper" style="position: relative;">
+                              <div class="form-control custom-select-display" id="staff-display" style="cursor: pointer; background: white;"><span id="staff-selected">annammedia6789</span><i class="fa fa-chevron-down" style="float: right; margin-top: 3px;"></i></div>
+                              <div class="custom-select-dropdown" id="staff-dropdown"></div>
+                              <input type="hidden" id="m-select-staff" name="m-select-staff" value="annammedia6789">
+                            </div>
+                          </div>
+                          <div class="col-lg-3"><div class="m-radio-inline"><label class="col-form-label">(Người đi thu tiền họ cho HĐ)</label></div></div>
+                        </div>
+
+                        <div class="form-group m-form__group row">
+                          <label class="col-lg-3 col-sm-12 col-12 col-form-label font-weight-bold">Tóm tắt tính toán</label>
+                          <div class="customize-responsive col-lg-9 col-sm-12 col-12">
+                            <div class="installment-annam-preview" id="installmentPreviewBox">
+                              <div class="installment-annam-preview__item"><span class="installment-annam-preview__label">Tiền lãi</span><strong id="previewTotalInterest">0</strong></div>
+                              <div class="installment-annam-preview__item"><span class="installment-annam-preview__label">Số kỳ đóng</span><strong id="previewTotalPeriods">0</strong></div>
+                              <div class="installment-annam-preview__item"><span class="installment-annam-preview__label">Mỗi kỳ</span><strong id="previewInstallmentAmount">0</strong></div>
+                              <div class="installment-annam-preview__item"><span class="installment-annam-preview__label">Đóng đầu tiên</span><strong id="previewFirstPayment">-</strong></div>
+                              <div class="installment-annam-preview__item"><span class="installment-annam-preview__label">Đáo hạn</span><strong id="previewFinalDueDate">-</strong></div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div class="form-group m-form__group row">
+                          <label class="col-lg-3 col-sm-12 col-12 col-form-label font-weight-bold"></label>
+                          <span class="customize-responsive col-lg-9 col-sm-12 col-12"><i id="messageNotUpdate" class="text-danger" style="font-size:12px;display:none">*Lưu ý: cập nhật sẽ tính lại lịch đóng và số tiền mỗi kỳ theo dữ liệu hiện tại.</i></span>
+                        </div>
+
+                        <div class="form-group m-form__group row">
+                          <div class="col-lg-9 ml-lg-auto">
+                            <button type="button" class="btn btn-primary m-btn--air" id="btnSaveInstallment"><i class="fa fa-save"></i> Lưu lại</button>
+                            <a data-dismiss="modal" class="btn btn-warning m-btn--air text-white"><i class="fa fa-close"></i> Đóng</a>
+                          </div>
+                        </div>
+                      </div>
+                    </form>
+                  </div>
+                </div>
               </div>
             </div>
+          </div>
+        </div>
 
-            <div class="app-bulk-actions">
-              <div id="installmentSelectedInfo" class="app-table__selection">Đã chọn 0 dòng</div>
-              <div class="app-bulk-actions__buttons">
-                <button id="btnInstallmentBulkStatus" class="btn btn-secondary" type="button">Đổi trạng thái</button>
-                <button id="btnInstallmentExport" class="btn btn-info" type="button">Export CSV</button>
-                <% if (canDeleteInstallment) { %>
-                  <button id="btnInstallmentBulkDelete" class="btn btn-danger" type="button">Xóa đã chọn</button>
-                <% } %>
+        <div class="modal fade" id="modal_delete_installment" tabindex="-1" role="dialog" aria-hidden="true">
+          <div class="modal-dialog modal-md" role="document">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title">Xóa hợp đồng</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">×</span></button>
+              </div>
+              <div class="modal-body">
+                <p id="deleteInstallmentMessage">Bạn có chắc chắn muốn xóa hợp đồng này?</p>
+                <div class="installment-annam-delete-actions">
+                  <button type="button" class="btn btn-danger" id="btnConfirmDeleteInstallment">Xóa hợp đồng</button>
+                  <button type="button" class="btn btn-secondary" data-dismiss="modal">Đóng</button>
+                </div>
               </div>
             </div>
+          </div>
+        </div>
 
-            <div class="installment-table-wrap">
-              <table class="table table-bordered table-hover installment-table">
-                <thead>
-                  <tr>
-                    <th class="app-table__select-head">
-                      <input id="installmentSelectAll" class="app-table__checkbox" type="checkbox" aria-label="Chọn tất cả">
-                    </th>
-                    <th data-sort="loanDate">Ngày</th>
-                    <th data-sort="customerRef">Mã KH- Tên_ Đời Máy</th>
-                    <th data-sort="loanPackage" class="text-right">Gói Vay</th>
-                    <th data-sort="revenue" class="text-right">Doanh thu</th>
-                    <th data-sort="paymentDay" class="text-center">Ngày Đóng Trước</th>
-                    <th data-sort="loanDays" class="text-center">Số ngày</th>
-                  </tr>
-                </thead>
-                <tbody id="installmentTableBody">
-                  <tr>
-                    <td colspan="7" class="text-center text-muted">Đang tải dữ liệu...</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            <div class="installment-footer">
-              <div>
-                <div id="tableMeta" class="installment-footer__meta"></div>
+        <div class="modal fade" id="modal_tomorrow_due_check" tabindex="-1" role="dialog" aria-hidden="true">
+          <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title">Kiểm tra hợp đồng đến kỳ vào ngày mai</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">×</span></button>
               </div>
-              <div id="pagination" class="installment-pagination"></div>
+              <div class="modal-body">
+                <div class="alert alert-info installment-annam-tomorrow-summary">
+                  <div id="tomorrowDueMessage">Đang kiểm tra danh sách hợp đồng đến kỳ vào ngày mai...</div>
+                  <div class="installment-annam-tomorrow-date" id="tomorrowDueDateLabel"></div>
+                </div>
+                <div class="table-responsive">
+                  <table class="table table-bordered table-hover">
+                    <thead>
+                      <tr>
+                        <th style="width:80px;">Mã HĐ</th>
+                        <th>Khách hàng</th>
+                        <th style="width:150px;">Cửa hàng</th>
+                        <th style="width:120px;" class="text-right">Tiền 1 kỳ</th>
+                        <th style="width:130px;" class="text-right">Còn phải đóng</th>
+                        <th style="width:110px;" class="text-center">Ngày đóng</th>
+                        <th style="width:90px;" class="text-center">Thao tác</th>
+                      </tr>
+                    </thead>
+                    <tbody id="tomorrowDueTableBody">
+                      <tr><td colspan="7" class="installment-annam-empty">Đang tải dữ liệu...</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -200,21 +592,34 @@
     </div>
   </div>
 </div>
-
 <%- include("components/flash") %>
 <script>
   window.__INSTALLMENT_PAGE__ = {
     listUrl: "/installment/api/list",
+    detailUrlBase: "/installment/api",
+    previewUrl: "/installment/api/preview",
+    createApiUrl: "/installment/api",
+    updateApiUrlBase: "/installment/api",
     importUrl: "/installment/api/import",
     deleteUrlBase: "/installment/api",
     bulkDeleteUrl: "/installment/api/bulk-delete",
     bulkStatusUrl: "/installment/api/bulk-status",
     progressUrlBase: "/installment/api/progress",
+    nextDateUrlBase: "/installment/api",
     defaultShopId: <%= defaultShopId %>,
     contextShopId: <%= currentUser && currentUser.shopId ? currentUser.shopId : 0 %>,
     canSelectShop: <%= canSelectShop ? 'true' : 'false' %>,
     canDeleteInstallment: <%= canDeleteInstallment ? 'true' : 'false' %>,
-    canImportInstallment: <%= canImportInstallment ? 'true' : 'false' %>
+    canImportInstallment: <%= canImportInstallment ? 'true' : 'false' %>,
+    pageMode: <%- JSON.stringify(installmentPageMode || "list") %>,
+    defaultDueStatus: <%- JSON.stringify(defaultDueStatus || "") %>,
+    defaultSortColumn: <%- JSON.stringify(defaultSortColumn || "loanDate") %>,
+    defaultSortDirection: <%- JSON.stringify(defaultSortDirection || "desc") %>,
+    viewOnlyMode: <%= installmentViewOnlyMode ? 'true' : 'false' %>,
+    bootstrap: <%- JSON.stringify(bootstrap) %>,
+    mockItems: <%- JSON.stringify(mockInstallments || []) %>,
+    shopOptions: <%- JSON.stringify(shopOptions || []) %>,
+    installerOptions: <%- JSON.stringify(installerOptions || []) %>
   };
 </script>
 <%- include("components/scripts", { extraScripts, inlineScripts }) %>

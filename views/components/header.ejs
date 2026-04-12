@@ -5,7 +5,7 @@
 %>
 <header class="m-grid__item m-header app-header">
   <div class="app-topbar">
-    <button id="appSidebarToggle" class="app-topbar__menu-toggle" type="button" aria-label="Mở menu">
+    <button id="appSidebarToggle" class="app-topbar__menu-toggle" type="button" aria-label="Open menu">
       <span class="app-topbar__menu-icon app-topbar__menu-icon--menu" aria-hidden="true">
         <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
           <path d="M4 6h16M4 12h16M4 18h10"></path>
@@ -19,11 +19,11 @@
     </button>
 
     <div class="app-topbar__title">
-      <div class="app-topbar__heading"><%= pageTitle || "2Gold Internal" %></div>
+      <div class="app-topbar__heading"><%= pageTitle || "Beat5" %></div>
       <% if (activeContextShop) { %>
-        <div class="app-topbar__subtitle">Đang làm việc tại <%= activeContextShop.name %></div>
+        <div class="app-topbar__subtitle">Dang lam viec tai <%= activeContextShop.name %></div>
       <% } else if (currentUser) { %>
-        <div class="app-topbar__subtitle">Quản lý hệ thống nội bộ 2Gold</div>
+        <div class="app-topbar__subtitle">Quan ly he thong noi bo Beat5</div>
       <% } %>
     </div>
 
@@ -33,7 +33,7 @@
       <% if (currentUser) { %>
         <div class="app-topbar__shop" title="<%= currentUser.displayName || currentUser.username %>">
           <strong><%= currentUser.displayName || currentUser.username %></strong>
-          <span class="app-topbar__role">Vai trò: <%= currentUser.role || "-" %></span>
+          <span class="app-topbar__role">Vai tro: <%= currentUser.role || "-" %></span>
         </div>
       <% } %>
     </div>
