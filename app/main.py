@@ -88,7 +88,7 @@ class ContractsTab(QWidget):
         # ===== SIDEBAR (Left Panel) =====
         sidebar = self.create_sidebar()
         
-        # ===== CONTENT (Right Panel) =====
+        # ===== CONTENT (Right Panel) - Takes 2/3 of interface width =====
         content_layout = QVBoxLayout()
         content_layout.setContentsMargins(10, 10, 10, 10)
         content_layout.setSpacing(5)
@@ -104,15 +104,16 @@ class ContractsTab(QWidget):
         self.top_table = QTableWidget()
         self.top_table.setColumnCount(16)
         self.top_table.setHorizontalHeaderLabels([
-            "Mã HD", "Khách hàng", "Line", "Lý do", "Mã Line",
-            "Copy Lô Nhạc", "Rung", "Tắt Rung", "Trạng Thái",
+            "Mã HD", "Khách hàng", "Line", "Lý do(Note)", "Mở Line",
+            "Copy Lời Nhắc", "Rung", "Tắt Rung", "Trạng Thái",
             "Tên Phone", "User icloud", "Pass icloud", "Xóa",
-            "STT", "Ngày Tháng", "Chuyên"
+            "STT", "Ngày Tháng", "Chuyển"
         ])
         self.top_table.setStyleSheet(TABLE_STYLE)
         self.top_table.setAlternatingRowColors(True)
         self.top_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.top_table.setMaximumHeight(300)
+        # Remove max height to allow expansion
+        self.top_table.setMinimumHeight(200)
         
         # Resize columns
         header = self.top_table.horizontalHeader()
@@ -121,7 +122,10 @@ class ContractsTab(QWidget):
         
         content_layout.addWidget(self.top_table)
         
-        # Bottom table - Thanh toán
+        # Add small spacing below top table
+        content_layout.addSpacing(10)
+        
+        # Bottom table - Thanh toán (directly below with no extra gap)
         bottom_label = QLabel("💳 Chi tiết Thanh Toán")
         bottom_label.setFont(top_font)
         content_layout.addWidget(bottom_label)
@@ -129,7 +133,7 @@ class ContractsTab(QWidget):
         self.bottom_table = QTableWidget()
         self.bottom_table.setColumnCount(6)
         self.bottom_table.setHorizontalHeaderLabels([
-            "Ngày", "Tiền hộ", "Tiền Cấn Lại", "Bóng", "Hủy", "Trạng Thái"
+            "Ngày", "Tiền họ", "Tiền Còn Lại", "Đóng", "Hủy", "Trạng Thái"
         ])
         self.bottom_table.setStyleSheet(TABLE_STYLE)
         self.bottom_table.setAlternatingRowColors(True)
@@ -140,14 +144,14 @@ class ContractsTab(QWidget):
             header.setSectionResizeMode(i, QHeaderView.ResizeMode.ResizeToContents)
         
         content_layout.addWidget(self.bottom_table)
-        content_layout.addStretch()
         
         # Add to main layout
-        main_layout.addWidget(sidebar, 0)
+        # Sidebar takes 1 unit, content takes 2 units (1:2 ratio for 1/3 : 2/3)
+        main_layout.addWidget(sidebar, 1)
         
         content_widget = QWidget()
         content_widget.setLayout(content_layout)
-        main_layout.addWidget(content_widget, 1)
+        main_layout.addWidget(content_widget, 2)
         
         self.setLayout(main_layout)
     
@@ -184,18 +188,24 @@ class ContractsTab(QWidget):
         func_label = QLabel("Chức Năng")
         layout.addWidget(func_label)
         
-        # Main options - radio buttons
-        func_group = QButtonGroup()
-        func_options = ["Chính", "Mãi 10", "Mãi 11", "Mãi 12", "Mãi 13"]
+        # Main option - "Chính" (Primary)
+        chính_btn = CustomButton("Chính", "primary")
+        chính_btn.setMaximumHeight(24)
+        layout.addWidget(chính_btn)
         
-        for i, opt in enumerate(func_options):
-            rb = QRadioButton(opt)
-            if i == 0:
-                rb.setChecked(True)
-            func_group.addButton(rb, i)
-            layout.addWidget(rb)
+        # Date-based buttons - "Mai" (Tomorrow) options
+        mai_label = QLabel("Mai (Ngày mai)")
+        layout.addWidget(mai_label)
         
-        # Sub-options as buttons
+        for opt in ["Mai 10", "Mai 11", "Mai 12", "Mai 13"]:
+            btn = CustomButton(opt)
+            btn.setMaximumHeight(22)
+            layout.addWidget(btn)
+        
+        # Sub-options as buttons (Quá Hạn buttons)
+        qh_label = QLabel("Quá Hạn (QH)")
+        layout.addWidget(qh_label)
+        
         for opt in ["QH13", "QH12", "QH9", "QH3", "QH7", "QH8"]:
             btn = CustomButton(opt)
             btn.setMaximumHeight(22)
@@ -230,8 +240,8 @@ class ContractsTab(QWidget):
         
         layout.addLayout(btn_layout)
         
-        # Check lịch bóng button (yellow)
-        check_btn = CustomButton("Check Lịch Bóng", "primary")
+        # Check lịch đóng button (yellow)
+        check_btn = CustomButton("Check Lịch Đóng", "primary")
         check_btn.setMaximumHeight(28)
         layout.addWidget(check_btn)
         
