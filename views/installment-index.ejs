@@ -9,10 +9,10 @@
       <% const isCalendarPage = installmentPageMode === "calendar"; %>
       <% const subheaderTitle = isCalendarPage ? "Lịch thanh toán" : "Trả góp"; %>
       <% const subheaderSubtitle = installmentViewOnlyMode
-        ? "Rà giao diện HTML và popup ở chế độ view-only, chưa nối SQLite"
+        ? "MAIN"
         : (isCalendarPage
           ? "Danh sách hợp đồng sắp đến hạn, đến hạn hôm nay và quá hạn thanh toán"
-          : "Danh sách hợp đồng, popup chi tiết và thao tác nhanh theo giao diện Annam"); %>
+          : "Danh sách hợp đồng"); %>
       <%- include("components/subheader", { title: subheaderTitle, subtitle: subheaderSubtitle }) %>
 
       <div class="m-content installment-annam-page <%= isCalendarPage ? 'installment-annam-page--calendar' : 'installment-annam-page--list' %>">

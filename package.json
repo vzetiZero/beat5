@@ -8,7 +8,7 @@
     "dev": "tsx src/server.ts",
     "build": "tsc",
     "repair:encoding": "node scripts/repair-source-encoding.js src",
-    "start": "tsx src/server.ts",
+    "start": "node dist/server.js",
     "seed:installment-demo": "node scripts/seed-installment-demo.js",
     "test": "node --test tests/**/*.js",
     "test:e2e:delete": "node scripts/playwright-delete-shop-smoke.js",
