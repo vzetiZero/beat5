@@ -3046,7 +3046,7 @@ export function createApp() {
     };
     const shopOptions = canManageAllShops
       ? getScopedShopOptions(user)
-      : getScopedShopOptions(user).filter((shop) => shop.id === user.shopId);
+      : getScopedShopOptions(user).filter((shop: { id: number }) => shop.id === user.shopId);
     const installerOptions = getInstallerOptions(user);
     const buildPageUrl = (pageNumber: number) => {
       const queryString = buildHistoryQueryString({
