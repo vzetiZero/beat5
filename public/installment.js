@@ -474,6 +474,7 @@
     var periods = Array.isArray(item && item.periods) ? item.periods : [];
     var today = new Date().toISOString().slice(0, 10);
     var firstUnpaidIndex = 0;
+    var lastCollectedIndex = 0;
     periods.some(function (period) {
       if (Number(period.amountRemaining || 0) > 0) {
         firstUnpaidIndex = Number(period.periodIndex || 0);
@@ -481,6 +482,16 @@
       }
       return false;
     });
+    periods.forEach(function (period) {
+      var periodIndex = Number(period.periodIndex || 0);
+      var amountPaid = Number(period.amountPaid || 0);
+      if (amountPaid > 0 && periodIndex > lastCollectedIndex) {
+        lastCollectedIndex = periodIndex;
+      }
+    });
+    if (!firstUnpaidIndex && periods.length) {
+      firstUnpaidIndex = Number(periods[periods.length - 1].periodIndex || 0) + 1;
+    }
     var rows = [];
     periods.forEach(function (period) {
       var periodIndex = Number(period.periodIndex || 0);
@@ -509,6 +520,7 @@
         paymentDate: period.lastPaymentAt || '',
         statusText: statusText,
         canPay: !paid && periodIndex === firstUnpaidIndex,
+        canEdit: amountPaid > 0 && periodIndex === lastCollectedIndex,
         isCurrentDebt: !paid && periodIndex === firstUnpaidIndex
       });
     });
