@@ -106,6 +106,110 @@
   color: #5d4fff;
 }
 
+.installment-annam-dashboard-panel {
+  background: #fbfbfe;
+  border: 1px solid #ebeef6;
+  border-radius: 14px;
+  box-shadow: 0 10px 24px rgba(37, 46, 99, 0.06);
+  height: 100%;
+  padding: 14px;
+}
+
+.installment-annam-dashboard-panel__title {
+  color: #3f4047;
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.installment-annam-dashboard-panel__body {
+  display: grid;
+  gap: 10px;
+}
+
+.installment-annam-dashboard-panel__body--compact {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.installment-annam-dashboard-empty {
+  color: #7b8192;
+  font-size: 13px;
+  padding: 10px 2px;
+}
+
+.installment-annam-shop-card {
+  background: #fff;
+  border: 1px solid #edf0f8;
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
+.installment-annam-shop-card--negative {
+  background: #fff6f6;
+  border-color: #ffd8d8;
+}
+
+.installment-annam-shop-card__header {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.installment-annam-shop-card__header strong {
+  color: #23304f;
+  font-size: 14px;
+}
+
+.installment-annam-shop-card__header span {
+  color: #1c7c54;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.installment-annam-shop-card--negative .installment-annam-shop-card__header span {
+  color: #c0392b;
+}
+
+.installment-annam-shop-card__meta {
+  display: grid;
+  gap: 4px;
+}
+
+.installment-annam-shop-card__meta span {
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.installment-annam-overdue-pill {
+  background: #fff7f7;
+  border: 1px solid #ffdede;
+  border-radius: 12px;
+  min-height: 92px;
+  padding: 12px;
+}
+
+.installment-annam-overdue-pill__label {
+  color: #b83333;
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.installment-annam-overdue-pill__value {
+  color: #24324a;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.installment-annam-overdue-pill__meta {
+  color: #7b8192;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
 .installment-annam-table-wrap {
   display: block;
   max-width: 100%;

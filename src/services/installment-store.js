@@ -1909,11 +1909,17 @@ function listInstallments(filters) {
     });
     const recalculatedStatusSummary = Array.from(recalculatedStatusSummaryMap.values()).sort((left, right) => right.count - left.count || Number(left.statusCode ?? 0) - Number(right.statusCode ?? 0));
     const summary = prioritizedItems.reduce((accumulator, item) => {
+        const paidBefore = Number(item.paidBefore || 0);
+        const loanPackage = Number(item.loanPackage || 0);
         accumulator.count += 1;
         accumulator.totalRevenue += Number(item.revenue || 0);
         accumulator.totalNetDisbursement += Number(item.netDisbursement || 0);
-        accumulator.totalPaidBefore += Number(item.paidBefore || 0);
-        accumulator.totalInterestEarned += Math.max(0, Number(item.paidBefore || 0) - Number(item.loanPackage || 0));
+        accumulator.totalPaidBefore += paidBefore;
+        accumulator.totalInterestEarned += Math.max(0, paidBefore - loanPackage);
+        if (Math.max(0, loanPackage - paidBefore) > 0) {
+            accumulator.totalLoanOutstanding += loanPackage;
+        }
+        accumulator.totalPrincipalOutstanding += Math.max(0, loanPackage - paidBefore);
         accumulator.totalInstallmentAmount += Number(item.installmentAmount || 0);
         return accumulator;
     }, {
@@ -1922,6 +1928,8 @@ function listInstallments(filters) {
         totalNetDisbursement: 0,
         totalPaidBefore: 0,
         totalInterestEarned: 0,
+        totalLoanOutstanding: 0,
+        totalPrincipalOutstanding: 0,
         totalInstallmentAmount: 0
     });
     const dashboardShopIds = sanitized.searchShopId !== null && sanitized.searchShopId > 0
@@ -1932,16 +1940,61 @@ function listInstallments(filters) {
     const shopSummary = (0, shop_store_1.listShops)({
         allowedIds: dashboardShopIds,
         page: 1,
-        perPage: 10
+        perPage: 500
+    });
+    const shopAvailabilityMap = new Map();
+    (shopSummary.items || []).forEach((shop) => {
+        const shopId = Number(shop.id || 0);
+        shopAvailabilityMap.set(shopId, {
+            shopId,
+            shopName: String(shop.name || shop.shopName || `Shop ${shopId || ""}`).trim(),
+            totalInvestment: Number(shop.totalMoney || 0),
+            totalLoanDisbursed: 0,
+            principalOutstanding: 0,
+            interestEarned: 0
+        });
     });
     const dashboard = prioritizedItems.reduce((accumulator, item) => {
+        const paidBefore = Number(item.paidBefore || 0);
+        const loanPackage = Number(item.loanPackage || 0);
+        const principalOutstanding = Math.max(0, loanPackage - paidBefore);
+        const interestEarned = Math.max(0, paidBefore - loanPackage);
         accumulator.totalContracts += 1;
-        accumulator.totalLoanPackage += Number(item.loanPackage || 0);
+        accumulator.totalLoanPackage += loanPackage;
         accumulator.totalRevenue += Number(item.revenue || 0);
         accumulator.totalNetDisbursement += Number(item.netDisbursement || 0);
-        accumulator.totalPaidBefore += Number(item.paidBefore || 0);
-        accumulator.totalInterestEarned += Math.max(0, Number(item.paidBefore || 0) - Number(item.loanPackage || 0));
+        accumulator.totalPaidBefore += paidBefore;
+        accumulator.totalInterestEarned += interestEarned;
+        if (principalOutstanding > 0) {
+            accumulator.totalLoanOutstanding += loanPackage;
+        }
+        accumulator.totalPrincipalOutstanding += principalOutstanding;
         accumulator.totalInstallmentAmount += Number(item.installmentAmount || 0);
+        if (item.dueInDays != null && Number(item.dueInDays) < 0) {
+            const overdueDays = Math.abs(Number(item.dueInDays));
+            const bucketKey = overdueDays <= 3 ? "1-3" : overdueDays <= 7 ? "4-7" : overdueDays <= 30 ? "8-30" : "31+";
+            const bucketLabel = overdueDays <= 3 ? "Quá hạn 1-3 ngày" : overdueDays <= 7 ? "Quá hạn 4-7 ngày" : overdueDays <= 30 ? "Quá hạn 8-30 ngày" : "Quá hạn trên 30 ngày";
+            const overdueRemaining = Number(item.currentPeriod?.amountRemaining || Math.max(0, Number(item.revenue || 0) - paidBefore));
+            const bucket = accumulator.overdueBuckets.get(bucketKey) || { key: bucketKey, label: bucketLabel, count: 0, remainingAmount: 0 };
+            bucket.count += 1;
+            bucket.remainingAmount += overdueRemaining;
+            accumulator.overdueBuckets.set(bucketKey, bucket);
+        }
+        const shopId = Number(item.shopId || 0);
+        if (shopId > 0) {
+            const currentShop = shopAvailabilityMap.get(shopId) || {
+                shopId,
+                shopName: String(item.shopName || `Shop ${shopId}`),
+                totalInvestment: 0,
+                totalLoanDisbursed: 0,
+                principalOutstanding: 0,
+                interestEarned: 0
+            };
+            currentShop.totalLoanDisbursed += loanPackage;
+            currentShop.principalOutstanding += principalOutstanding;
+            currentShop.interestEarned += interestEarned;
+            shopAvailabilityMap.set(shopId, currentShop);
+        }
         if (Number.isFinite(Number(item.loanDays)) && Number(item.loanDays) > 0) {
             accumulator.loanDaysTotal += Number(item.loanDays);
             accumulator.loanDaysCount += 1;
@@ -1966,14 +2019,31 @@ function listInstallments(filters) {
         totalNetDisbursement: 0,
         totalPaidBefore: 0,
         totalInterestEarned: 0,
+        totalLoanOutstanding: 0,
+        totalPrincipalOutstanding: 0,
         totalInstallmentAmount: 0,
         loanDaysTotal: 0,
         loanDaysCount: 0,
         contractsTodayCount: 0,
         dueTodayCount: 0,
         dueSoonCount: 0,
-        overdueCount: 0
+        overdueCount: 0,
+        overdueBuckets: new Map()
     });
+    const shopAvailability = Array.from(shopAvailabilityMap.values())
+        .map((shop) => {
+        const actualCashOnHand = Number(shop.totalInvestment || 0) - Number(shop.principalOutstanding || 0) + Number(shop.interestEarned || 0);
+        return {
+            ...shop,
+            actualCashOnHand,
+            availableToLend: Math.max(0, actualCashOnHand)
+        };
+    })
+        .sort((left, right) => right.availableToLend - left.availableToLend || left.shopName.localeCompare(right.shopName, "vi"));
+    const overdueBuckets = ["1-3", "4-7", "8-30", "31+"]
+        .map((key) => dashboard.overdueBuckets.get(key) || null)
+        .filter(Boolean);
+    const totalActualCash = Number(shopSummary.summary?.totalMoney || 0) - dashboard.totalPrincipalOutstanding + dashboard.totalInterestEarned;
     return {
         items,
         total: prioritizedItems.length,
@@ -1988,9 +2058,15 @@ function listInstallments(filters) {
         dashboard: {
             totalContracts: dashboard.totalContracts,
             totalLoanPackage: dashboard.totalLoanPackage,
+            totalLoanDisbursed: dashboard.totalLoanPackage,
+            totalLoanOutstanding: dashboard.totalLoanOutstanding,
+            totalPrincipalOutstanding: dashboard.totalPrincipalOutstanding,
             totalRevenue: dashboard.totalRevenue,
+            totalExpectedInterest: Math.max(0, dashboard.totalRevenue - dashboard.totalLoanPackage),
             totalNetDisbursement: dashboard.totalNetDisbursement,
             totalShopInvestment: Number(shopSummary.summary?.totalMoney || 0),
+            totalActualCash,
+            totalAvailableToLend: Math.max(0, totalActualCash),
             totalPaidBefore: dashboard.totalPaidBefore,
             totalInterestEarned: dashboard.totalInterestEarned,
             totalInstallmentAmount: dashboard.totalInstallmentAmount,
@@ -1998,7 +2074,9 @@ function listInstallments(filters) {
             contractsTodayCount: dashboard.contractsTodayCount,
             dueTodayCount: dashboard.dueTodayCount,
             dueSoonCount: dashboard.dueSoonCount,
-            overdueCount: dashboard.overdueCount
+            overdueCount: dashboard.overdueCount,
+            shopAvailability,
+            overdueBuckets
         },
         statusSummary: recalculatedStatusSummary,
         lastImport: lastImportRow

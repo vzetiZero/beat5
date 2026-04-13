@@ -37,6 +37,10 @@ type InstallmentItemFixture = {
   statusCode: number;
   statusText: string;
   dueStatus: "normal" | "due_soon" | "due_today" | "overdue";
+  dueInDays?: number;
+  currentPeriod?: {
+    amountRemaining?: number;
+  };
   schedules: InstallmentScheduleFixture[];
   history: InstallmentHistoryFixture[];
   nextDateHistory: InstallmentHistoryFixture[];
@@ -483,14 +487,40 @@ const baseItems: InstallmentItemFixture[] = [
 ];
 
 function computeDashboard(items: InstallmentItemFixture[]) {
-  return items.reduce(
+  const summary: any = items.reduce(
     (summary, item) => {
       summary.totalNetDisbursement += item.loanPackage;
       summary.totalLoanPackage += item.loanPackage;
       summary.totalRevenue += item.revenue;
       summary.totalPaidBefore += item.paidBefore;
       summary.totalInterestEarned += Math.max(0, item.paidBefore - item.loanPackage);
+      if (Math.max(0, item.loanPackage - item.paidBefore) > 0) {
+        summary.totalLoanOutstanding += item.loanPackage;
+      }
+      summary.totalPrincipalOutstanding += Math.max(0, item.loanPackage - item.paidBefore);
       summary.totalContracts += 1;
+      const overdueDays = item.dueInDays != null && item.dueInDays < 0 ? Math.abs(item.dueInDays) : 0;
+      if (overdueDays > 0) {
+        const bucketKey = overdueDays <= 3 ? '1-3' : overdueDays <= 7 ? '4-7' : overdueDays <= 30 ? '8-30' : '31+';
+        const bucketLabel = overdueDays <= 3 ? 'Quá hạn 1-3 ngày' : overdueDays <= 7 ? 'Quá hạn 4-7 ngày' : overdueDays <= 30 ? 'Quá hạn 8-30 ngày' : 'Quá hạn trên 30 ngày';
+        const current = summary.overdueBuckets.get(bucketKey) || { key: bucketKey, label: bucketLabel, count: 0, remainingAmount: 0 };
+        current.count += 1;
+        current.remainingAmount += item.currentPeriod?.amountRemaining || Math.max(0, item.revenue - item.paidBefore);
+        summary.overdueBuckets.set(bucketKey, current);
+      }
+      const shopId = item.shopId;
+      const currentShop = summary.shopAvailability.get(shopId) || {
+        shopId,
+        shopName: item.shopName,
+        totalInvestment: 0,
+        totalLoanDisbursed: 0,
+        principalOutstanding: 0,
+        interestEarned: 0
+      };
+      currentShop.totalLoanDisbursed += item.loanPackage;
+      currentShop.principalOutstanding += Math.max(0, item.loanPackage - item.paidBefore);
+      currentShop.interestEarned += Math.max(0, item.paidBefore - item.loanPackage);
+      summary.shopAvailability.set(shopId, currentShop);
       return summary;
     },
     {
@@ -499,9 +529,31 @@ function computeDashboard(items: InstallmentItemFixture[]) {
       totalRevenue: 0,
       totalPaidBefore: 0,
       totalInterestEarned: 0,
-      totalContracts: 0
+      totalLoanOutstanding: 0,
+      totalPrincipalOutstanding: 0,
+      totalLoanDisbursed: 0,
+      totalExpectedInterest: 0,
+      totalActualCash: 0,
+      totalContracts: 0,
+      overdueBuckets: new Map(),
+      shopAvailability: new Map()
     }
   );
+  summary.totalLoanDisbursed = summary.totalLoanPackage;
+  summary.totalExpectedInterest = Math.max(0, summary.totalRevenue - summary.totalLoanPackage);
+  summary.totalActualCash = 0;
+  summary.overdueBuckets = ['1-3', '4-7', '8-30', '31+']
+    .map((key) => summary.overdueBuckets.get(key) || null)
+    .filter(Boolean);
+  summary.shopAvailability = Array.from(summary.shopAvailability.values()).map((shop: any) => {
+    const actualCashOnHand = Number(shop.totalInvestment || 0) - Number(shop.principalOutstanding || 0) + Number(shop.interestEarned || 0);
+    return {
+      ...shop,
+      actualCashOnHand,
+      availableToLend: Math.max(0, actualCashOnHand)
+    };
+  });
+  return summary;
 }
 
 function computeStatusSummary(items: InstallmentItemFixture[]) {

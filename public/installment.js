@@ -99,10 +99,14 @@
     previewFinalDueDate: document.getElementById('previewFinalDueDate'),
     messageNotUpdate: document.getElementById('messageNotUpdate'),
     cash: document.getElementById('lbl_LoanPawn_MoneyEndDate'),
-    investment: document.getElementById('lbl_LoanPawn_MoneyInvestment'),
+    investmentDisbursed: document.getElementById('lbl_LoanPawn_MoneyInvestmentDisbursed'),
+    investmentOutstanding: document.getElementById('lbl_LoanPawn_MoneyInvestmentOutstanding'),
+    principalOutstanding: document.getElementById('lbl_LoanPawn_PrincipalOutstanding'),
     interestExpected: document.getElementById('lbl_LoanPawn_InterestExpected'),
     interestEarned: document.getElementById('lbl_LoanPawn_InterestEarned'),
     totalContracts: document.getElementById('lbl_LoanPawn_TotalContracts'),
+    dashboardShopAvailability: document.getElementById('dashboardShopAvailability'),
+    dashboardOverdueBuckets: document.getElementById('dashboardOverdueBuckets'),
     closeContractRemaining: document.getElementById('lblDongHD_TotalMoneyCurrent')
   };
 
@@ -267,11 +271,59 @@
   }
 
   function renderCards(dashboard) {
-    if (els.cash) els.cash.textContent = money(dashboard.totalShopInvestment || 0);
-    if (els.investment) els.investment.textContent = money(dashboard.totalLoanPackage || 0);
-    if (els.interestExpected) els.interestExpected.textContent = money((dashboard.totalRevenue || 0) - (dashboard.totalLoanPackage || 0));
+    if (els.cash) els.cash.textContent = money(dashboard.totalActualCash || 0);
+    if (els.investmentDisbursed) els.investmentDisbursed.textContent = money(dashboard.totalLoanDisbursed || dashboard.totalLoanPackage || 0);
+    if (els.investmentOutstanding) els.investmentOutstanding.textContent = money(dashboard.totalLoanOutstanding || 0);
+    if (els.principalOutstanding) els.principalOutstanding.textContent = money(dashboard.totalPrincipalOutstanding || dashboard.totalLoanOutstanding || 0);
+    if (els.interestExpected) els.interestExpected.textContent = money(dashboard.totalExpectedInterest || ((dashboard.totalRevenue || 0) - (dashboard.totalLoanPackage || 0)));
     if (els.interestEarned) els.interestEarned.textContent = money(dashboard.totalInterestEarned || 0);
     if (els.totalContracts) els.totalContracts.textContent = money(dashboard.totalContracts || 0);
+    renderShopAvailability(dashboard.shopAvailability || []);
+    renderOverdueBuckets(dashboard.overdueBuckets || []);
+  }
+
+  function renderShopAvailability(items) {
+    if (!els.dashboardShopAvailability) return;
+    if (!Array.isArray(items) || !items.length) {
+      els.dashboardShopAvailability.innerHTML = '<div class="installment-annam-dashboard-empty">Chưa có dữ liệu shop.</div>';
+      return;
+    }
+    els.dashboardShopAvailability.innerHTML = items.map(function (item) {
+      var actualCash = Number(item.actualCashOnHand || 0);
+      var availableToLend = Number(item.availableToLend || 0);
+      var isNegative = actualCash < 0;
+      return [
+        '<div class="installment-annam-shop-card' + (isNegative ? ' installment-annam-shop-card--negative' : '') + '">',
+        '<div class="installment-annam-shop-card__header">',
+        '<strong>' + escapeHtml(item.shopName || 'Chưa rõ shop') + '</strong>',
+        '<span>Có thể cho vay: <b>' + money(availableToLend) + '</b></span>',
+        '</div>',
+        '<div class="installment-annam-shop-card__meta">',
+        '<span>Vốn đầu tư: ' + money(item.totalInvestment || 0) + '</span>',
+        '<span>Dư nợ gốc: ' + money(item.principalOutstanding || 0) + '</span>',
+        '<span>Lãi đã thu: ' + money(item.interestEarned || 0) + '</span>',
+        '<span>Tiền thực tế: ' + money(actualCash) + '</span>',
+        '</div>',
+        '</div>'
+      ].join('');
+    }).join('');
+  }
+
+  function renderOverdueBuckets(items) {
+    if (!els.dashboardOverdueBuckets) return;
+    if (!Array.isArray(items) || !items.length) {
+      els.dashboardOverdueBuckets.innerHTML = '<div class="installment-annam-dashboard-empty">Chưa có hợp đồng quá hạn.</div>';
+      return;
+    }
+    els.dashboardOverdueBuckets.innerHTML = items.map(function (item) {
+      return [
+        '<div class="installment-annam-overdue-pill">',
+        '<div class="installment-annam-overdue-pill__label">' + escapeHtml(item.label || '') + '</div>',
+        '<div class="installment-annam-overdue-pill__value">' + money(item.count || 0) + ' HĐ</div>',
+        '<div class="installment-annam-overdue-pill__meta">Thiếu ' + money(item.remainingAmount || 0) + ' VNĐ</div>',
+        '</div>'
+      ].join('');
+    }).join('');
   }
 
   function renderSummary(summary) {

@@ -37,42 +37,56 @@
           </div>
           <div class="m-portlet__body">
             <div class="row">
-              <div class="col-lg-12 col-xl-12 col-sm-12 col-12">
-                <div class="card installment-annam-cards">
-                  <div class="row clearfix text-center">
-                    <div class="m--margin-top-10 col-md-6" id="dvMoneyEndDate">
-                      <div class="body bg-info text-light installment-annam-card installment-annam-card--cash">
-                        <div>TỔNG VỐN ĐẦU TƯ <a class="installment-annam-reload" id="dashboardReloadLink" style="cursor:pointer;"><i class="flaticon-share m--font-danger" title="Reload dữ liệu"></i></a></div>
-                        <h4 id="lbl_LoanPawn_MoneyEndDate">0</h4>
+              <% if (!isCalendarPage) { %>
+                <div class="col-lg-12 col-xl-12 col-sm-12 col-12">
+                  <div class="card installment-annam-cards">
+                    <div class="row clearfix text-center">
+                      <div class="m--margin-top-10 col-md-6" id="dvMoneyEndDate">
+                        <div class="body bg-info text-light installment-annam-card installment-annam-card--cash">
+                          <div>VỐN ĐANG CÓ THỰC TẾ <a class="installment-annam-reload" id="dashboardReloadLink" style="cursor:pointer;"><i class="flaticon-share m--font-danger" title="Reload dữ liệu"></i></a></div>
+                          <h4 id="lbl_LoanPawn_MoneyEndDate">0</h4>
+                        </div>
                       </div>
-                    </div>
-                    <div class="m--margin-top-10 col-md-6" id="dvMoneyInvestment">
-                      <div class="body bg-info text-light installment-annam-card installment-annam-card--loan">
-                        <span>TIỀN CHO VAY</span>
-                        <h4 id="lbl_LoanPawn_MoneyInvestment">0</h4>
+                      <div class="m--margin-top-10 col-md-6" id="dvMoneyInvestmentDisbursed">
+                        <div class="body bg-info text-light installment-annam-card installment-annam-card--loan">
+                          <span>TIỀN ĐÃ CHO VAY</span>
+                          <h4 id="lbl_LoanPawn_MoneyInvestmentDisbursed">0</h4>
+                        </div>
                       </div>
-                    </div>
-                    <div class="m--margin-top-10 col-md-4" id="dvInterestExpected">
-                      <div class="body m--bg-brand text-light installment-annam-card installment-annam-card--revenue">
-                        <span>LÃI DỰ KIẾN</span>
-                        <h4 id="lbl_LoanPawn_InterestExpected">0</h4>
+                      <div class="m--margin-top-10 col-md-6" id="dvMoneyInvestmentOutstanding">
+                        <div class="body bg-info text-light installment-annam-card installment-annam-card--loan">
+                          <span>TIỀN ĐANG CHO VAY</span>
+                          <h4 id="lbl_LoanPawn_MoneyInvestmentOutstanding">0</h4>
+                        </div>
                       </div>
-                    </div>
-                    <div class="m--margin-top-10 col-md-4" id="dvInterestEarned">
-                      <div class="body bg-success text-light installment-annam-card installment-annam-card--paid">
-                        <span>LÃI ĐÃ THU</span>
-                        <h4 id="lbl_LoanPawn_InterestEarned">0</h4>
+                      <div class="m--margin-top-10 col-md-6" id="dvPrincipalOutstanding">
+                        <div class="body bg-info text-light installment-annam-card installment-annam-card--loan">
+                          <span>DƯ NỢ GỐC</span>
+                          <h4 id="lbl_LoanPawn_PrincipalOutstanding">0</h4>
+                        </div>
                       </div>
-                    </div>
-                    <div class="m--margin-top-10 col-md-4" id="dvContractSummary">
-                      <div class="body bg-success text-light installment-annam-card installment-annam-card--contract">
-                        <span>TỔNG HỢP ĐỒNG</span>
-                        <h4 id="lbl_LoanPawn_TotalContracts">0</h4>
+                      <div class="m--margin-top-10 col-md-4" id="dvInterestExpected">
+                        <div class="body m--bg-brand text-light installment-annam-card installment-annam-card--revenue">
+                          <span>LÃI DỰ KIẾN</span>
+                          <h4 id="lbl_LoanPawn_InterestExpected">0</h4>
+                        </div>
+                      </div>
+                      <div class="m--margin-top-10 col-md-4" id="dvInterestEarned">
+                        <div class="body bg-success text-light installment-annam-card installment-annam-card--paid">
+                          <span>LÃI ĐÃ THU</span>
+                          <h4 id="lbl_LoanPawn_InterestEarned">0</h4>
+                        </div>
+                      </div>
+                      <div class="m--margin-top-10 col-md-4" id="dvContractSummary">
+                        <div class="body bg-success text-light installment-annam-card installment-annam-card--contract">
+                          <span>TỔNG HỢP ĐỒNG</span>
+                          <h4 id="lbl_LoanPawn_TotalContracts">0</h4>
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              <% } %>
 
               <div class="col-lg-12 col-xl-12 col-sm-12 col-12 m--align-left m--margin-top-10 installment-annam-toolbar">
                 <% if (!isCalendarPage) { %>
