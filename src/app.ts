@@ -340,7 +340,7 @@ function buildInstallmentPopupPayload(
       parseOptionalNumber(source.statusCode) ??
       parseOptionalNumber(fallbackSource.statusCode) ??
       0,
-    statusText: normalizeLooseText(source.statusText ?? fallbackSource.statusText ?? "Mới tạo"),
+    statusText: normalizeLooseText(source.statusText ?? fallbackSource.statusText ?? "Chậm trả góp"),
     paymentMethod: normalizeLooseText(source.paymentMethod ?? fallbackSource.paymentMethod ?? "periodic") || "periodic",
     collectInAdvance: parseBooleanFlag(source.collectInAdvance ?? fallbackSource.collectInAdvance),
     prepaidPeriodCount:
@@ -749,8 +749,8 @@ export function createApp() {
         });
         req.session.flash = {
           type: "success",
-          title: "??ng nh?p th?nh c?ng",
-          text: "Nh?n vi?n ?? ???c x?c th?c n?i b?.",
+          title: "Đã đăng nhập",
+          text: "",
           mode: "login-success",
           confirmButtonText: "Tiếp tục",
           timer: 2500
@@ -782,8 +782,8 @@ export function createApp() {
       });
       req.session.flash = {
         type: "success",
-        title: "??ng nh?p th?nh c?ng",
-        text: message,
+        title: "Đã đăng nhập",
+        text: "",
         mode: "login-success",
         confirmButtonText: "Tiếp tục",
         timer: 2500
@@ -912,7 +912,7 @@ export function createApp() {
     logPageAccess(
       req,
       "installment",
-      options.pageMode === "calendar" ? "Truy cap lich thanh toan tra gop" : "Truy cap danh sach tra gop",
+      options.pageMode === "calendar" ? "Truy cap hop dong den han tra gop" : "Truy cap danh sach tra gop",
       {
       shopId: user.shopId
       }
@@ -932,7 +932,7 @@ export function createApp() {
     const installerOptions = getInstallerOptions(user);
 
     res.render("installment-index", {
-      pageTitle: options.pageMode === "calendar" ? "Lich thanh toan tra gop" : "Tra gop",
+      pageTitle: options.pageMode === "calendar" ? "Hop dong den han tra gop" : "Tra gop",
       activePath: options.activePath,
       navItems: visibleNavItems(user),
       bootstrap,
@@ -1147,7 +1147,7 @@ export function createApp() {
       const payload = buildInstallmentPopupPayload(req.body, requestedShopId, {
         paymentMethod: "periodic",
         statusCode: 0,
-        statusText: "Mới tạo",
+        statusText: "Chậm trả góp",
         installerName: user.displayName || user.username || ""
       });
       const created = saveInstallment(payload);
@@ -1288,6 +1288,7 @@ export function createApp() {
         const result = listInstallments({
           generalSearch: String(req.query.generalSearch || ""),
           status: parseOptionalNumber(req.query.Status),
+          statusText: String(req.query.StatusText || ""),
           fromDate: String(req.query.FromDate || ""),
           toDate: String(req.query.ToDate || ""),
           loanTime: parseOptionalNumber(req.query.LoanTime),

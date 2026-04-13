@@ -56,6 +56,7 @@ exports.updateInstallmentStatus = updateInstallmentStatus;
 exports.updateInstallmentCollectionProgress = updateInstallmentCollectionProgress;
 exports.updateInstallmentNextPaymentDay = updateInstallmentNextPaymentDay;
 exports.previewInstallment = previewInstallment;
+exports.syncAllInstallmentStatuses = syncAllInstallmentStatuses;
 const node_fs_1 = __importDefault(require("node:fs"));
 const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 const XLSX = __importStar(require("xlsx"));
@@ -691,7 +692,11 @@ function getInstallmentCollectionState(row, loanDate, loanDays) {
             nextDueDate: "",
             finalDueDate: "",
             dueInDays: null,
-            dueStatus: ""
+            dueStatus: "",
+            paidPeriodsCount: 0,
+            totalPeriods: 0,
+            isFullyPaid: false,
+            finalDueInDays: null
         };
     }
     const schedule = buildCollectionSchedule({
@@ -707,7 +712,11 @@ function getInstallmentCollectionState(row, loanDate, loanDays) {
             nextDueDate: "",
             finalDueDate,
             dueInDays: null,
-            dueStatus: ""
+            dueStatus: "",
+            paidPeriodsCount: 0,
+            totalPeriods: 0,
+            isFullyPaid: false,
+            finalDueInDays: finalDueDate ? getDaysBetweenIsoDates(new Date().toISOString().slice(0, 10), finalDueDate) : null
         };
     }
     const storedProgress = parseCollectionProgress(row.collection_progress);
@@ -728,6 +737,10 @@ function getInstallmentCollectionState(row, loanDate, loanDays) {
     const nextDueDate = explicitPaymentDay || nextUnpaidPeriod?.dueDate || "";
     const todayIsoDate = new Date().toISOString().slice(0, 10);
     const dueInDays = nextDueDate ? getDaysBetweenIsoDates(todayIsoDate, nextDueDate) : null;
+    const finalDueInDays = finalDueDate ? getDaysBetweenIsoDates(todayIsoDate, finalDueDate) : null;
+    const paidPeriodsCount = paidProgressSet.size;
+    const totalPeriods = schedule.length;
+    const isFullyPaid = totalPeriods > 0 && paidPeriodsCount >= totalPeriods;
     let dueStatus = "";
     if (dueInDays !== null) {
         if (dueInDays < 0) {
@@ -744,8 +757,34 @@ function getInstallmentCollectionState(row, loanDate, loanDays) {
         nextDueDate,
         finalDueDate,
         dueInDays,
-        dueStatus
+        dueStatus,
+        paidPeriodsCount,
+        totalPeriods,
+        isFullyPaid,
+        finalDueInDays
     };
+}
+
+function resolveInstallmentDisplayStatus(collectionState) {
+    if (collectionState.isFullyPaid) {
+        return "Đã đóng";
+    }
+    if (collectionState.finalDueInDays !== null && collectionState.finalDueInDays < 0) {
+        return "Quá hạn";
+    }
+    if (collectionState.dueInDays === 0) {
+        return "Đến ngày trả góp";
+    }
+    if (collectionState.dueInDays === 1) {
+        return "Ngày mai đến ngày";
+    }
+    if (collectionState.paidPeriodsCount <= 0) {
+        return "Chậm trả góp";
+    }
+    if (collectionState.dueInDays !== null && collectionState.dueInDays < 0) {
+        return "Chậm trả góp";
+    }
+    return "Đang vay";
 }
 
 function normalizePaymentDateValue(value, loanDateIso, normalizationMessages) {
@@ -831,6 +870,9 @@ function normalizeInstallmentInput(input) {
         if (loanPackage <= 0) {
             throw new Error("Tiền đưa khách phải lớn hơn 0 VNĐ.");
         }
+        if (loanPackage >= revenue) {
+            throw new Error("Tiền đưa khách phải nhỏ hơn Trả Góp.");
+        }
 
         const safeIntervalDays = Math.min(collectionIntervalDays, loanDays);
         const prepaidPeriodCount = parseBooleanValue(input.collectInAdvance) ? 1 : parseNullableInteger(input.prepaidPeriodCount) || 0;
@@ -879,6 +921,17 @@ function normalizeInstallmentInput(input) {
     }
 
     const paymentDate = normalizePaymentDateValue(input.paymentDay, isoDate);
+    const directLoanPackage = parseInteger(input.loanPackage);
+    const directRevenue = parseInteger(input.revenue);
+    if (directRevenue <= 0) {
+        throw new Error("Trả góp phải lớn hơn 0 VNĐ.");
+    }
+    if (directLoanPackage <= 0) {
+        throw new Error("Tiền đưa khách phải lớn hơn 0 VNĐ.");
+    }
+    if (directLoanPackage >= directRevenue) {
+        throw new Error("Tiền đưa khách phải nhỏ hơn Trả Góp.");
+    }
     return {
         stt: parseNullableInteger(input.stt),
         shopId: shop.id,
@@ -889,8 +942,8 @@ function normalizeInstallmentInput(input) {
         customerCode,
         customerName,
         imei,
-        loanPackage: parseInteger(input.loanPackage),
-        revenue: parseInteger(input.revenue),
+        loanPackage: directLoanPackage,
+        revenue: directRevenue,
         setupFee: parseInteger(input.setupFee),
         netDisbursement: parseInteger(input.netDisbursement),
         paidBefore: parseInteger(input.paidBefore),
@@ -1089,6 +1142,8 @@ function mapInstallmentRow(row) {
     const dueDate = collectionState.finalDueDate;
     const dueInDays = collectionState.dueInDays;
     const dueStatus = collectionState.dueStatus;
+    const statusText = resolveInstallmentDisplayStatus(collectionState);
+    const statusCode = statusText === "Đã đóng" ? 1 : statusText === "Quá hạn" ? 2 : 0;
     return {
         id: Number(row.id),
         stt: row.stt === null || row.stt === undefined ? null : Number(row.stt),
@@ -1117,8 +1172,8 @@ function mapInstallmentRow(row) {
         installerName: String(row.installer_name ?? ""),
         referralFee: Number(row.referral_fee ?? 0),
         mc: String(row.mc ?? ""),
-        statusCode: row.status_code === null || row.status_code === undefined ? null : Number(row.status_code),
-        statusText: String(row.status_text ?? ""),
+        statusCode,
+        statusText,
         paymentMethod: normalizePaymentMethod(row.payment_method),
         collectionIntervalDays: Number(row.collection_interval_days ?? 1),
         prepaidPeriodCount: Number(row.prepaid_period_count ?? 0),
@@ -1126,6 +1181,67 @@ function mapInstallmentRow(row) {
         createdAt: String(row.created_at ?? ""),
         updatedAt: String(row.updated_at ?? "")
     };
+}
+function getShopAllocatedLoanPackage(shopId, excludeInstallmentId) {
+    const normalizedShopId = Number(shopId);
+    if (!Number.isFinite(normalizedShopId) || normalizedShopId <= 0) {
+        return 0;
+    }
+    const excludedId = Number(excludeInstallmentId || 0);
+    const db = getDb();
+    const rows = db.prepare(`
+      SELECT
+        id,
+        stt,
+        shop_id,
+        shop_name,
+        loan_date,
+        loan_date_display,
+        customer_ref,
+        customer_code,
+        customer_name,
+        imei,
+        loan_package,
+        revenue,
+        setup_fee,
+        net_disbursement,
+        paid_before,
+        payment_day,
+        loan_days,
+        installment_amount,
+        note,
+        installer_name,
+        referral_fee,
+        mc,
+        status_code,
+        status_text,
+        payment_method,
+        collection_interval_days,
+        prepaid_period_count,
+        collection_progress,
+        created_at,
+        updated_at
+      FROM installments
+      WHERE shop_id = ?
+        AND (? <= 0 OR id <> ?)
+    `).all(normalizedShopId, excludedId, excludedId);
+    return rows
+        .map(mapInstallmentRow)
+        .filter((item) => item.statusText !== "Đã đóng")
+        .reduce((total, item) => total + Number(item.loanPackage || 0), 0);
+}
+function getDefaultInstallmentPriority(item) {
+    const statusText = String(item?.statusText || "").trim();
+    if (statusText === "Đến ngày trả góp") {
+        return 0;
+    }
+    if (statusText === "Ngày mai đến ngày") {
+        return 1;
+    }
+    if (statusText === "Quá hạn") {
+        return 2;
+    }
+    return 3;
 }
 function sanitizeFilters(filters) {
     const page = Math.max(1, Number(filters.page || 1));
@@ -1135,6 +1251,7 @@ function sanitizeFilters(filters) {
     return {
         generalSearch: String(filters.generalSearch || "").trim(),
         status: typeof filters.status === "number" ? filters.status : null,
+        statusText: String(filters.statusText || "").trim(),
         fromDate: String(filters.fromDate || "").trim(),
         toDate: String(filters.toDate || "").trim(),
         loanTime: typeof filters.loanTime === "number" ? filters.loanTime : null,
@@ -1447,20 +1564,27 @@ function listInstallments(filters) {
         count: Number(row.count || 0)
     }));
     const allItems = rows.map(mapInstallmentRow);
-    const filteredItems = sanitized.dueStatus
+    const filteredItems = (sanitized.dueStatus
         ? sanitized.dueStatus === "calendar_due"
-            ? allItems.filter((item) => item.dueStatus === "due_today" || item.dueStatus === "due_soon" || item.dueStatus === "overdue")
+            ? allItems.filter((item) => item.statusText === "Quá hạn" || item.statusText === "Chậm trả góp")
             : sanitized.dueStatus === "due_tomorrow"
                 ? allItems.filter((item) => Number(item.dueInDays) === 1)
                 : allItems.filter((item) => item.dueStatus === sanitized.dueStatus)
-        : allItems;
+        : allItems)
+        .filter((item) => !sanitized.statusText || String(item.statusText || "").trim() === sanitized.statusText);
+    const prioritizedItems = sortColumn === "loanDate" && sanitized.sortDirection === "desc"
+        ? filteredItems
+            .map((item, index) => ({ item, index }))
+            .sort((left, right) => getDefaultInstallmentPriority(left.item) - getDefaultInstallmentPriority(right.item) || left.index - right.index)
+            .map((entry) => entry.item)
+        : filteredItems;
     const offset = (sanitized.page - 1) * sanitized.perPage;
-    const items = filteredItems.slice(offset, offset + sanitized.perPage);
-    const availableLoanDays = Array.from(new Set(filteredItems
+    const items = prioritizedItems.slice(offset, offset + sanitized.perPage);
+    const availableLoanDays = Array.from(new Set(prioritizedItems
         .map((item) => item.loanDays)
         .filter((value) => value !== null && Number.isFinite(value) && value > 0)))
         .sort((left, right) => Number(left) - Number(right));
-    const visibleStatuses = Array.from(new Map(filteredItems
+    const visibleStatuses = Array.from(new Map(prioritizedItems
         .filter((item) => item.statusCode !== null || String(item.statusText || "").trim())
         .map((item) => {
         const key = `${item.statusCode ?? 0}::${String(item.statusText || "").trim()}`;
@@ -1470,7 +1594,7 @@ function listInstallments(filters) {
             }];
     })).values());
     const recalculatedStatusSummaryMap = new Map();
-    filteredItems.forEach((item) => {
+    prioritizedItems.forEach((item) => {
         const statusCode = item.statusCode === null || item.statusCode === undefined ? null : Number(item.statusCode);
         const statusText = String(item.statusText || "Chua dat trang thai");
         const key = `${statusCode ?? "null"}::${statusText}`;
@@ -1483,7 +1607,7 @@ function listInstallments(filters) {
         recalculatedStatusSummaryMap.set(key, current);
     });
     const recalculatedStatusSummary = Array.from(recalculatedStatusSummaryMap.values()).sort((left, right) => right.count - left.count || Number(left.statusCode ?? 0) - Number(right.statusCode ?? 0));
-    const summary = filteredItems.reduce((accumulator, item) => {
+    const summary = prioritizedItems.reduce((accumulator, item) => {
         accumulator.count += 1;
         accumulator.totalRevenue += Number(item.revenue || 0);
         accumulator.totalNetDisbursement += Number(item.netDisbursement || 0);
@@ -1497,7 +1621,17 @@ function listInstallments(filters) {
         totalPaidBefore: 0,
         totalInstallmentAmount: 0
     });
-    const dashboard = filteredItems.reduce((accumulator, item) => {
+    const dashboardShopIds = sanitized.searchShopId !== null && sanitized.searchShopId > 0
+        ? [sanitized.searchShopId]
+        : sanitized.allowedShopIds && sanitized.allowedShopIds.length > 0
+            ? sanitized.allowedShopIds
+            : undefined;
+    const shopSummary = (0, shop_store_1.listShops)({
+        allowedIds: dashboardShopIds,
+        page: 1,
+        perPage: 10
+    });
+    const dashboard = prioritizedItems.reduce((accumulator, item) => {
         accumulator.totalContracts += 1;
         accumulator.totalLoanPackage += Number(item.loanPackage || 0);
         accumulator.totalRevenue += Number(item.revenue || 0);
@@ -1537,10 +1671,10 @@ function listInstallments(filters) {
     });
     return {
         items,
-        total: filteredItems.length,
+        total: prioritizedItems.length,
         page: sanitized.page,
         perPage: sanitized.perPage,
-        totalPages: Math.max(1, Math.ceil(filteredItems.length / sanitized.perPage)),
+        totalPages: Math.max(1, Math.ceil(prioritizedItems.length / sanitized.perPage)),
         sortColumn,
         sortDirection: sanitized.sortDirection,
         availableLoanDays,
@@ -1551,6 +1685,7 @@ function listInstallments(filters) {
             totalLoanPackage: dashboard.totalLoanPackage,
             totalRevenue: dashboard.totalRevenue,
             totalNetDisbursement: dashboard.totalNetDisbursement,
+            totalShopInvestment: Number(shopSummary.summary?.totalMoney || 0),
             totalPaidBefore: dashboard.totalPaidBefore,
             totalInstallmentAmount: dashboard.totalInstallmentAmount,
             averageLoanDays: dashboard.loanDaysCount > 0 ? dashboard.loanDaysTotal / dashboard.loanDaysCount : 0,
@@ -1616,6 +1751,127 @@ function previewInstallment(input) {
             prepaidPeriodCount: Number(normalized.prepaidPeriodCount || 0)
         }
     };
+}
+function syncAllInstallmentStatuses() {
+    const db = getDb();
+    const rows = db.prepare(`
+      SELECT
+        id,
+        stt,
+        shop_id,
+        shop_name,
+        loan_date,
+        loan_date_display,
+        customer_ref,
+        customer_code,
+        customer_name,
+        imei,
+        loan_package,
+        revenue,
+        setup_fee,
+        net_disbursement,
+        paid_before,
+        payment_day,
+        loan_days,
+        installment_amount,
+        note,
+        installer_name,
+        referral_fee,
+        mc,
+        status_code,
+        status_text,
+        payment_method,
+        collection_interval_days,
+        prepaid_period_count,
+        collection_progress,
+        created_at,
+        updated_at
+      FROM installments
+    `).all();
+    const updateStatement = db.prepare(`
+      UPDATE installments
+      SET
+        status_code = ?,
+        status_text = ?,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `);
+    const runSync = db.transaction((items) => {
+        let updatedCount = 0;
+        for (const row of items) {
+            const mapped = mapInstallmentRow(row);
+            const currentStatusCode = row.status_code === null || row.status_code === undefined ? null : Number(row.status_code);
+            const currentStatusText = String(row.status_text ?? "").trim();
+            const nextStatusCode = mapped.statusCode === null || mapped.statusCode === undefined ? null : Number(mapped.statusCode);
+            const nextStatusText = String(mapped.statusText || "").trim();
+            if (currentStatusCode === nextStatusCode && currentStatusText === nextStatusText) {
+                continue;
+            }
+            updateStatement.run(nextStatusCode, nextStatusText, Number(row.id));
+            updatedCount += 1;
+        }
+        return updatedCount;
+    });
+    const updatedCount = runSync(rows);
+    return {
+        total: rows.length,
+        updated: updatedCount
+    };
+}
+function persistResolvedInstallmentStatus(id) {
+    const installmentId = Number(id);
+    if (!Number.isFinite(installmentId) || installmentId <= 0) {
+        throw new Error("ID hợp đồng không hợp lệ.");
+    }
+    const db = getDb();
+    const row = db.prepare(`
+      SELECT
+        id,
+        stt,
+        shop_id,
+        shop_name,
+        loan_date,
+        loan_date_display,
+        customer_ref,
+        customer_code,
+        customer_name,
+        imei,
+        loan_package,
+        revenue,
+        setup_fee,
+        net_disbursement,
+        paid_before,
+        payment_day,
+        loan_days,
+        installment_amount,
+        note,
+        installer_name,
+        referral_fee,
+        mc,
+        status_code,
+        status_text,
+        payment_method,
+        collection_interval_days,
+        prepaid_period_count,
+        collection_progress,
+        created_at,
+        updated_at
+      FROM installments
+      WHERE id = ?
+    `).get(installmentId);
+    if (!row) {
+        throw new Error("Không tìm thấy hợp đồng trả góp.");
+    }
+    const mapped = mapInstallmentRow(row);
+    db.prepare(`
+      UPDATE installments
+      SET
+        status_code = ?,
+        status_text = ?,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(mapped.statusCode, mapped.statusText, installmentId);
+    return getInstallmentById(installmentId);
 }
 function formatInstallmentDateForUi(value) {
     return value ? formatDisplayDate(value) : "";
@@ -1812,6 +2068,14 @@ function getNextInstallmentStt() {
 function saveInstallment(input, installmentId) {
     const db = getDb();
     const normalized = normalizeInstallmentInput(input);
+    const allocatedLoanPackage = getShopAllocatedLoanPackage(normalized.shopId, installmentId);
+    const nextAllocatedLoanPackage = allocatedLoanPackage + Number(normalized.loanPackage || 0);
+    const shop = (0, shop_store_1.getShopById)(normalized.shopId);
+    const shopInvestment = Number(shop?.totalMoney || 0);
+    if (nextAllocatedLoanPackage > shopInvestment) {
+        const availableAmount = Math.max(0, shopInvestment - allocatedLoanPackage);
+        throw new Error(`Vốn của cửa hàng không đủ. Shop hiện có ${shopInvestment.toLocaleString("vi-VN")} VNĐ, đang cho vay ${allocatedLoanPackage.toLocaleString("vi-VN")} VNĐ, còn có thể cho vay ${availableAmount.toLocaleString("vi-VN")} VNĐ.`);
+    }
     if (installmentId) {
         const existing = getInstallmentById(installmentId);
         if (!existing) {
@@ -1857,7 +2121,7 @@ function saveInstallment(input, installmentId) {
         if (result.changes === 0) {
             throw new Error("Không tìm thấy bản ghi trả góp để cập nhật.");
         }
-        return getInstallmentById(installmentId);
+        return persistResolvedInstallmentStatus(installmentId);
     }
     const insertStatement = db.prepare(`
     INSERT INTO installments (
@@ -1924,7 +2188,7 @@ function saveInstallment(input, installmentId) {
         ...normalized,
         stt: normalized.stt ?? getNextInstallmentStt()
     });
-    return getInstallmentById(Number(result.lastInsertRowid));
+    return persistResolvedInstallmentStatus(Number(result.lastInsertRowid));
 }
 function restoreInstallmentFromSnapshot(snapshot) {
     const restoredId = Number(snapshot?.id || 0);
@@ -2129,15 +2393,13 @@ function updateInstallmentCollectionProgress(id, paidPeriodIndices) {
         payment_day = ?,
         prepaid_period_count = ?,
         collection_progress = ?,
-        status_code = ?,
-        status_text = ?,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `).run(paidBefore, nextPaymentDay, prepaidPeriodCount, JSON.stringify(normalizedProgress), nextStatusCode, nextStatusText, installmentId);
+    `).run(paidBefore, nextPaymentDay, prepaidPeriodCount, JSON.stringify(normalizedProgress), installmentId);
     if (Number(result.changes || 0) === 0) {
         throw new Error("Không thể cập nhật tiến độ đóng tiền.");
     }
-    return getInstallmentById(installmentId);
+    return persistResolvedInstallmentStatus(installmentId);
 }
 function updateInstallmentNextPaymentDay(id, nextPaymentDay) {
     const installmentId = Number(id);

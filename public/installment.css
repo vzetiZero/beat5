@@ -112,11 +112,20 @@
   overflow-x: auto;
   overflow-y: hidden;
   padding-bottom: 10px;
+  position: relative;
+  -webkit-overflow-scrolling: touch;
   scrollbar-color: #8e7df5 #ece8ff;
   scrollbar-width: auto;
 }
 
+.installment-annam-table-wrap > .m_datatable {
+  display: inline-block;
+  min-width: 100%;
+}
+
 .installment-annam-table {
+  width: max-content;
+  min-width: 100%;
   min-width: 1320px;
 }
 
@@ -135,6 +144,8 @@
 }
 
 .installment-annam-table--calendar {
+  width: max-content;
+  min-width: 100%;
   min-width: 1280px;
 }
 
@@ -155,6 +166,27 @@
 
 .installment-annam-table .m-datatable__cell {
   vertical-align: middle;
+}
+
+.installment-annam-sticky-action {
+  position: sticky;
+  right: 0;
+  z-index: 3;
+  background: #fff;
+  box-shadow: -10px 0 14px -14px rgba(39, 48, 84, 0.45);
+}
+
+.installment-annam-table thead .installment-annam-sticky-action {
+  z-index: 5;
+  background: #f4f5f8;
+}
+
+.installment-annam-page--calendar .installment-annam-sticky-action {
+  background: #fff;
+}
+
+.installment-annam-total-row .installment-annam-sticky-action {
+  background: #f8f6ff;
 }
 
 .installment-annam-inline-action {

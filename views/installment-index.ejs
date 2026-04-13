@@ -7,11 +7,11 @@
     <div class="m-grid__item m-grid__item--fluid m-wrapper">
       <%- include("components/auth-context") %>
       <% const isCalendarPage = installmentPageMode === "calendar"; %>
-      <% const subheaderTitle = isCalendarPage ? "Lịch thanh toán" : "Trả góp"; %>
+      <% const subheaderTitle = isCalendarPage ? "Hợp đồng Đến Hạn Trả Góp" : "Trả góp"; %>
       <% const subheaderSubtitle = installmentViewOnlyMode
         ? "MAIN"
         : (isCalendarPage
-          ? "Danh sách hợp đồng sắp đến hạn, đến hạn hôm nay và quá hạn thanh toán"
+          ? "Danh sách hợp đồng quá hạn và chậm trả góp cần theo dõi"
           : "Danh sách hợp đồng"); %>
       <%- include("components/subheader", { title: subheaderTitle, subtitle: subheaderSubtitle }) %>
 
@@ -23,7 +23,7 @@
         <% } %>
         <% if (isCalendarPage) { %>
           <div class="alert alert-info installment-annam-calendar-banner" role="alert">
-            Theo dõi các hợp đồng đến hạn thanh toán tại một màn riêng. Danh sách này tự động lọc các hợp đồng <b>sắp đến hạn</b>, <b>đến hạn hôm nay</b> và <b>quá hạn</b>.
+            Theo dõi các hợp đồng cần xử lý tại một màn riêng. Danh sách này tự động lọc các hợp đồng <b>Quá hạn</b> và <b>Chậm trả góp</b>.
           </div>
         <% } %>
 
@@ -31,7 +31,7 @@
           <div class="m-portlet__head">
             <div class="m-portlet__head-caption">
               <div class="m-portlet__head-title">
-                <h3 class="m-portlet__head-text"><%= isCalendarPage ? "Hợp đồng đến hạn thanh toán" : "Hợp đồng Trả góp" %></h3>
+                <h3 class="m-portlet__head-text"><%= isCalendarPage ? "Hợp đồng Đến Hạn Trả Góp" : "Hợp đồng Trả góp" %></h3>
               </div>
             </div>
           </div>
@@ -42,7 +42,7 @@
                   <div class="row clearfix text-center">
                     <div class="m--margin-top-10 col-md-6" id="dvMoneyEndDate">
                       <div class="body bg-info text-light installment-annam-card installment-annam-card--cash">
-                        <div>QUỸ TIỀN MẶT <a class="installment-annam-reload" id="dashboardReloadLink" style="cursor:pointer;"><i class="flaticon-share m--font-danger" title="Reload dữ liệu"></i></a></div>
+                        <div>TỔNG VỐN ĐẦU TƯ <a class="installment-annam-reload" id="dashboardReloadLink" style="cursor:pointer;"><i class="flaticon-share m--font-danger" title="Reload dữ liệu"></i></a></div>
                         <h4 id="lbl_LoanPawn_MoneyEndDate">0</h4>
                       </div>
                     </div>
@@ -134,7 +134,7 @@
                   <select class="custom-select" id="m-search-status">
                     <option value="0">Tất cả hợp đồng</option>
                     <% bootstrap.availableStatuses.forEach((status) => { %>
-                      <option value="<%= status.code %>"><%= status.label %></option>
+                      <option value="<%= status.label %>"><%= status.label %></option>
                     <% }) %>
                   </select>
                 </div>
@@ -188,7 +188,7 @@
                           <th data-sort="remainingMoney" class="m-datatable__cell--right m-datatable__cell"><span style="width: 120px;">Còn phải đóng</span></th>
                           <th data-sort="statusText" class="m-datatable__cell--center m-datatable__cell"><span style="width: 110px;">Tình trạng</span></th>
                           <th data-sort="paymentDay" class="m-datatable__cell--center m-datatable__cell"><span style="width: 100px;">Ngày phải đóng</span></th>
-                          <th class="m-datatable__cell"><span style="width: 190px;">Chức năng</span></th>
+                          <th class="m-datatable__cell installment-annam-sticky-action"><span style="width: 190px;">Chức năng</span></th>
                         </tr>
                       </thead>
                       <tbody class="m-datatable__body" id="installmentTableBody">
@@ -445,13 +445,13 @@
 
                         <div class="form-group m-form__group row">
                           <label class="col-lg-3 col-sm-12 col-12 col-form-label font-weight-bold">Trả Góp <span class="text-danger">*</span></label>
-                          <div class="customize-responsive col-lg-3 col-md-9 col-sm-12"><div class="input-group m-input-group"><input type="number" class="form-control m-input" id="txtTotalMoney" name="txtTotalMoney" value="0"><span class="input-group-addon"><i class="text-black">VNĐ</i></span></div></div>
+                          <div class="customize-responsive col-lg-3 col-md-9 col-sm-12"><div class="input-group m-input-group"><input type="text" inputmode="numeric" autocomplete="off" class="form-control m-input" id="txtTotalMoney" name="txtTotalMoney" value="0"><span class="input-group-addon"><i class="text-black">VNĐ</i></span></div></div>
                           <div class="col-lg-6"><div class="m-radio-inline"><label class="col-form-label text-danger">(Chú ý: Trả Góp nghĩa là tổng tiền khách phải đóng)</label></div></div>
                         </div>
 
                         <div class="form-group m-form__group row">
                           <label class="col-lg-3 col-sm-12 col-12 col-form-label font-weight-bold">Tiền đưa khách <span class="text-danger">*</span></label>
-                          <div class="customize-responsive col-lg-3 col-md-9 col-sm-12"><div class="input-group m-input-group"><input type="number" class="form-control m-input" id="txtTotalMoneyReceived" name="txtTotalMoneyReceived" value="0"><span class="input-group-addon"><i class="text-black">VNĐ</i></span></div></div>
+                          <div class="customize-responsive col-lg-3 col-md-9 col-sm-12"><div class="input-group m-input-group"><input type="text" inputmode="numeric" autocomplete="off" class="form-control m-input" id="txtTotalMoneyReceived" name="txtTotalMoneyReceived" value="0"><span class="input-group-addon"><i class="text-black">VNĐ</i></span></div></div>
                           <div class="col-lg-3"><div class="m-radio-inline"><label class="col-form-label" id="StrExample">(Tổng tiền khách nhận được)</label></div></div>
                         </div>
 

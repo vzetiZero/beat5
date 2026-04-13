@@ -3,7 +3,7 @@
   var state = {
     generalSearch: '',
     shopId: String(config.defaultShopId || 0),
-    status: '0',
+    status: '',
     dueStatus: String(config.defaultDueStatus || ''),
     loanTime: '0',
     fromDate: '',
@@ -95,6 +95,44 @@
 
   function money(value) {
     return Number(value || 0).toLocaleString('vi-VN');
+  }
+
+  function parseMoneyInput(value) {
+    var normalized = String(value == null ? '' : value).replace(/[^\d-]/g, '');
+    if (!normalized || normalized === '-') return 0;
+    var parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function setMoneyInputValue(input, value) {
+    if (!input) return;
+    input.value = money(parseMoneyInput(value));
+  }
+
+  function bindMoneyInput(input) {
+    if (!input) return;
+    input.addEventListener('input', function () {
+      var selectionEnd = input.selectionEnd;
+      var digitsBeforeCaret = String(input.value.slice(0, selectionEnd == null ? input.value.length : selectionEnd)).replace(/\D/g, '').length;
+      input.value = money(parseMoneyInput(input.value));
+      if (typeof input.setSelectionRange === 'function') {
+        var cursor = input.value.length;
+        var seenDigits = 0;
+        for (var index = 0; index < input.value.length; index += 1) {
+          if (/\d/.test(input.value.charAt(index))) {
+            seenDigits += 1;
+          }
+          if (seenDigits >= digitsBeforeCaret) {
+            cursor = index + 1;
+            break;
+          }
+        }
+        input.setSelectionRange(cursor, cursor);
+      }
+    });
+    input.addEventListener('blur', function () {
+      input.value = money(parseMoneyInput(input.value));
+    });
   }
 
   function escapeHtml(value) {
@@ -207,7 +245,8 @@
   function readControls() {
     state.generalSearch = els.generalSearch ? els.generalSearch.value.trim() : '';
     state.shopId = els.shopFilter ? String(els.shopFilter.value || '0') : '0';
-    state.status = els.statusFilter ? String(els.statusFilter.value || '0') : '0';
+    state.status = els.statusFilter ? String(els.statusFilter.value || '') : '';
+    if (state.status === '0') state.status = '';
     state.loanTime = els.loanTimeFilter ? String(els.loanTimeFilter.value || '0') : '0';
     state.fromDate = els.fromDate ? String(els.fromDate.value || '') : '';
     state.toDate = els.toDate ? String(els.toDate.value || '') : '';
@@ -215,7 +254,7 @@
   }
 
   function renderCards(dashboard) {
-    if (els.cash) els.cash.textContent = money(dashboard.totalNetDisbursement || 0);
+    if (els.cash) els.cash.textContent = money(dashboard.totalShopInvestment || 0);
     if (els.investment) els.investment.textContent = money(dashboard.totalLoanPackage || 0);
     if (els.interestExpected) els.interestExpected.textContent = money((dashboard.totalRevenue || 0) - (dashboard.totalLoanPackage || 0));
     if (els.interestEarned) els.interestEarned.textContent = money(dashboard.totalPaidBefore || 0);
@@ -238,10 +277,10 @@
     var statusText = String(item.statusText || '').trim() || 'Quá hạn thanh toán';
     var lower = statusText.toLowerCase();
     var cls = 'm-badge--metal';
-    if (item.dueStatus === 'overdue' || lower.indexOf('quá hạn') >= 0) cls = 'm-badge--danger';
-    else if (item.dueStatus === 'due_today' || item.dueStatus === 'due_soon') cls = 'm-badge--warning';
+    if (lower.indexOf('quá hạn') >= 0 || lower.indexOf('chậm trả') >= 0) cls = 'm-badge--danger';
+    else if (lower.indexOf('đến ngày trả góp') >= 0 || lower.indexOf('ngày mai đến ngày') >= 0 || item.dueStatus === 'due_today' || item.dueStatus === 'due_soon') cls = 'm-badge--warning';
     else if (lower.indexOf('đã đóng') >= 0 || lower.indexOf('hoàn thành') >= 0) cls = 'm-badge--success';
-    else if (lower.indexOf('đang') >= 0 || lower.indexOf('mới') >= 0) cls = 'm-badge--info';
+    else if (lower.indexOf('đang') >= 0) cls = 'm-badge--info';
     return '<span class="m-badge ' + cls + ' m-badge--wide" style="font-size:12px">' + escapeHtml(statusText) + '</span>';
   }
 
@@ -273,7 +312,7 @@
       '<td class="m-datatable__cell--right m-datatable__cell"><span class="installment-annam-total-value" style="width:120px;">' + money(totals.remainingMoney) + '</span></td>',
       '<td class="m-datatable__cell--center m-datatable__cell"><span style="width:110px;"></span></td>',
       '<td class="m-datatable__cell--center m-datatable__cell"><span style="width:110px;"></span></td>',
-      '<td class="m-datatable__cell"><span style="width:190px;"></span></td>',
+      '<td class="m-datatable__cell installment-annam-sticky-action"><span style="width:190px;"></span></td>',
       '</tr>'
     ].join('');
   }
@@ -324,7 +363,7 @@
         '<td class="m-datatable__cell--right m-datatable__cell"><span style="width:120px;"><div><div class="m-card-user__details"><span class="m-card-user__name">' + money(remainingMoney) + '</span><br><a href="#" class="m-card-user__email m-link small">(' + money(remainingPeriods) + ' kỳ)</a></div></div></span></td>',
         '<td class="m-datatable__cell--center m-datatable__cell"><span style="width:110px;">' + getStatusBadge(item) + '</span></td>',
         '<td class="m-datatable__cell--center m-datatable__cell"><span style="width:110px;"><a href="#" class="js-open-next-date installment-annam-inline-action" data-id="' + item.id + '" title="Cập nhật ngày đóng"><i class="fa fa-calendar"></i><span>' + escapeHtml(dateText(item.paymentDayDisplay || item.paymentDay || '')) + '</span></a></span></td>',
-        '<td class="m-datatable__cell"><span style="width:190px;" class="installment-annam-action-group"><button class="btn btn-sm installment-annam-action installment-annam-action--collect js-open-detail" type="button" data-id="' + item.id + '" title="Đóng tiền" aria-label="Đóng tiền"><img src="/public/assets/pay.svg" alt="Đóng tiền" style="width:16px; height:16px;"></button> <button class="btn btn-sm installment-annam-action installment-annam-action--calendar js-open-next-date" type="button" data-id="' + item.id + '" title="Cập nhật ngày đóng" aria-label="Cập nhật ngày đóng"><i class="fa fa-calendar"></i></button> <button class="btn btn-sm installment-annam-action installment-annam-action--edit js-open-edit" type="button" data-id="' + item.id + '" title="Sửa hợp đồng" aria-label="Sửa hợp đồng"><img src="/public/assets/update.svg" alt="Sửa hợp đồng" style="width:16px; height:16px;"></button> <button class="btn btn-sm installment-annam-action installment-annam-action--delete js-open-delete" type="button" data-id="' + item.id + '" title="Xóa hợp đồng" aria-label="Xóa hợp đồng"><img src="/public/assets/delete.svg" alt="Xóa hợp đồng" style="width:16px; height:16px;"></button></span></td>',
+        '<td class="m-datatable__cell installment-annam-sticky-action"><span style="width:190px;" class="installment-annam-action-group"><button class="btn btn-sm installment-annam-action installment-annam-action--collect js-open-detail" type="button" data-id="' + item.id + '" title="Đóng tiền" aria-label="Đóng tiền"><img src="/public/assets/pay.svg" alt="Đóng tiền" style="width:16px; height:16px;"></button> <button class="btn btn-sm installment-annam-action installment-annam-action--calendar js-open-next-date" type="button" data-id="' + item.id + '" title="Cập nhật ngày đóng" aria-label="Cập nhật ngày đóng"><i class="fa fa-calendar"></i></button> <button class="btn btn-sm installment-annam-action installment-annam-action--edit js-open-edit" type="button" data-id="' + item.id + '" title="Sửa hợp đồng" aria-label="Sửa hợp đồng"><img src="/public/assets/update.svg" alt="Sửa hợp đồng" style="width:16px; height:16px;"></button> <button class="btn btn-sm installment-annam-action installment-annam-action--delete js-open-delete" type="button" data-id="' + item.id + '" title="Xóa hợp đồng" aria-label="Xóa hợp đồng"><img src="/public/assets/delete.svg" alt="Xóa hợp đồng" style="width:16px; height:16px;"></button></span></td>',
         '</tr>'
       ].join('');
     }).join('');
@@ -535,13 +574,21 @@
   }
 
   function updatePerCyclePreview() {
-    var revenue = Number(els.txtTotalMoney ? els.txtTotalMoney.value : 0);
+    var revenue = parseMoneyInput(els.txtTotalMoney ? els.txtTotalMoney.value : 0);
     var loanDays = Math.max(1, Number(els.txtLoanTime ? els.txtLoanTime.value : 1));
     var intervalDays = Math.max(1, Number(els.txtFrequency ? els.txtFrequency.value : 1));
     var periods = Math.max(1, Math.ceil(loanDays / intervalDays));
     var amount = Math.round(revenue / periods);
     var node = document.getElementById('strMoneyOfLoanTime');
     if (node) node.textContent = money(amount);
+  }
+
+  function validateMoneyRelation(payload) {
+    if (!payload) return null;
+    if (payload.revenue > 0 && payload.loanPackage > 0 && payload.loanPackage >= payload.revenue) {
+      return 'Tiền đưa khách phải nhỏ hơn Trả Góp.';
+    }
+    return null;
   }
 
   function renderPreview(summary) {
@@ -572,8 +619,8 @@
     if (els.hfId) els.hfId.value = item ? String(item.id) : '0';
     if (els.txtCustomer) els.txtCustomer.value = item ? String(item.customerRef || '') : '';
     if (els.txtCodeID) els.txtCodeID.value = item ? String(item.stt || item.id || '') : '';
-    if (els.txtTotalMoney) els.txtTotalMoney.value = item ? String(item.revenue || 0) : '0';
-    if (els.txtTotalMoneyReceived) els.txtTotalMoneyReceived.value = item ? String(item.loanPackage || 0) : '0';
+    if (els.txtTotalMoney) setMoneyInputValue(els.txtTotalMoney, item ? item.revenue || 0 : 0);
+    if (els.txtTotalMoneyReceived) setMoneyInputValue(els.txtTotalMoneyReceived, item ? item.loanPackage || 0 : 0);
     if (els.txtLoanTime) els.txtLoanTime.value = item ? String(item.loanDays || 30) : '30';
     if (els.txtFrequency) els.txtFrequency.value = item ? String(item.collectionIntervalDays || 1) : '1';
     if (els.txtStrFromDate) els.txtStrFromDate.value = item ? toDateValue(item.loanDate) : new Date().toISOString().slice(0, 10);
@@ -600,8 +647,8 @@
       shopId: popupShopId,
       codeId: els.txtCodeID ? els.txtCodeID.value : '',
       customerRef: els.txtCustomer ? els.txtCustomer.value.trim() : '',
-      loanPackage: Number(els.txtTotalMoneyReceived ? els.txtTotalMoneyReceived.value : 0),
-      revenue: Number(els.txtTotalMoney ? els.txtTotalMoney.value : 0),
+      loanPackage: parseMoneyInput(els.txtTotalMoneyReceived ? els.txtTotalMoneyReceived.value : 0),
+      revenue: parseMoneyInput(els.txtTotalMoney ? els.txtTotalMoney.value : 0),
       loanDays: Number(els.txtLoanTime ? els.txtLoanTime.value : 0),
       collectionIntervalDays: Number(els.txtFrequency ? els.txtFrequency.value : 1),
       loanDate: els.txtStrFromDate ? els.txtStrFromDate.value : '',
@@ -610,12 +657,12 @@
       paymentMethod: 'periodic',
       paymentDay: activeItem ? activeItem.paymentDay : '',
       statusCode: activeItem && activeItem.statusCode != null ? activeItem.statusCode : 0,
-      statusText: activeItem && activeItem.statusText ? activeItem.statusText : 'Mới tạo',
+      statusText: activeItem && activeItem.statusText ? activeItem.statusText : 'Chậm trả góp',
       imei: activeItem ? activeItem.imei : '',
       mc: activeItem ? activeItem.mc : '',
       setupFee: activeItem ? activeItem.setupFee : 0,
       referralFee: activeItem ? activeItem.referralFee : 0,
-      netDisbursement: activeItem ? activeItem.netDisbursement : Number(els.txtTotalMoneyReceived ? els.txtTotalMoneyReceived.value : 0),
+      netDisbursement: activeItem ? activeItem.netDisbursement : parseMoneyInput(els.txtTotalMoneyReceived ? els.txtTotalMoneyReceived.value : 0),
       paidBefore: activeItem ? activeItem.paidBefore : 0
     };
   }
@@ -635,6 +682,10 @@
     if (!config.previewUrl) return;
     var payload = buildMutationPayload();
     if (!payload.shopId || payload.shopId <= 0 || !payload.loanDate || payload.loanPackage <= 0 || payload.revenue <= 0 || payload.loanDays <= 0 || payload.collectionIntervalDays <= 0) {
+      renderPreview(null);
+      return;
+    }
+    if (validateMoneyRelation(payload)) {
       renderPreview(null);
       return;
     }
@@ -669,6 +720,11 @@
       notify('Thiếu dữ liệu', 'Ngày bốc là bắt buộc.');
       return;
     }
+    var moneyRelationError = validateMoneyRelation(payload);
+    if (moneyRelationError) {
+      notify('Dữ liệu không hợp lệ', moneyRelationError);
+      return;
+    }
     var id = Number(els.hfId ? els.hfId.value : 0);
     var url = id ? String(config.updateApiUrlBase || '/installment/api') + '/' + encodeURIComponent(id) : String(config.createApiUrl || '/installment/api');
     var method = id ? 'PUT' : 'POST';
@@ -700,7 +756,7 @@
     var params = new URLSearchParams();
     params.set('generalSearch', state.generalSearch);
     params.set('SearchShopId', state.shopId);
-    params.set('Status', state.status);
+    params.set('StatusText', state.status);
     params.set('DueStatus', state.dueStatus);
     params.set('LoanTime', state.loanTime);
     params.set('FromDate', state.fromDate);
@@ -989,6 +1045,10 @@
     });
   }
 
+  bindMoneyInput(els.txtTotalMoney);
+  bindMoneyInput(els.txtTotalMoneyReceived);
+  setMoneyInputValue(els.txtTotalMoney, els.txtTotalMoney ? els.txtTotalMoney.value : 0);
+  setMoneyInputValue(els.txtTotalMoneyReceived, els.txtTotalMoneyReceived ? els.txtTotalMoneyReceived.value : 0);
   renderInstallerOptions();
   updatePerCyclePreview();
   renderPreview(null);

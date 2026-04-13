@@ -13,13 +13,15 @@ exports.appNavItems = [
                 label: "Danh sách",
                 href: "/Installment/Index/",
                 icon: "flaticon-list-3"
-            },
-            {
-                label: "Lịch thanh toán",
-                href: "/Calendar/Installment",
-                icon: "flaticon-calendar"
             }
         ]
+    },
+    {
+        label: "Lịch thanh toán",
+        href: "/Calendar/Installment",
+        icon: "flaticon-calendar",
+        permission: "installment",
+        children: []
     },
     {
         label: "Cửa hàng",
