@@ -395,13 +395,19 @@ function resolveScopedHistoryShopId(user: NonNullable<Request["session"]["user"]
 function buildHistoryFilters(user: NonNullable<Request["session"]["user"]>, source: Request["query"]) {
   const requestedShopId = parseOptionalNumber(source.shopId);
   const scopedShopId = resolveScopedHistoryShopId(user, requestedShopId);
+  const enforcedShopId =
+    user.canAccessAllShops || user.role === "admin"
+      ? scopedShopId
+      : Number.isFinite(user.shopId) && user.shopId > 0
+        ? user.shopId
+        : scopedShopId;
 
   return {
     generalSearch: String(source.generalSearch || ""),
     moduleName: String(source.moduleName || ""),
     actionType: String(source.actionType || ""),
     actorUsername: String(source.actorUsername || ""),
-    shopId: scopedShopId,
+    shopId: enforcedShopId,
     fromDate: String(source.fromDate || ""),
     toDate: String(source.toDate || ""),
     page: Number(source.page || 1),
@@ -895,6 +901,7 @@ export function createApp() {
   ) {
     const user = req.session.user!;
     const canManageAllShops = user.canAccessAllShops || user.role === "admin";
+    const scopedSearchShopId = canManageAllShops ? undefined : user.shopId;
     const repairedLegacyRows = reconcileLegacyInstallmentsForUser(user);
     if (repairedLegacyRows > 0) {
       safeWriteAuditLogFromRequest(user, req, {
@@ -922,6 +929,7 @@ export function createApp() {
     );
     const bootstrapSource = listInstallments({
       dueStatus: options.defaultDueStatus || "",
+      searchShopId: scopedSearchShopId,
       allowedShopIds: canManageAllShops ? undefined : getAllowedShopIds(user)
     });
     const bootstrap = {
@@ -1279,7 +1287,8 @@ export function createApp() {
       const user = req.session.user!;
       const canManageAllShops = user.canAccessAllShops || user.role === "admin";
       reconcileLegacyInstallmentsForUser(user);
-      const searchShopId = parseOptionalNumber(req.query.SearchShopId);
+      const requestedSearchShopId = parseOptionalNumber(req.query.SearchShopId);
+      const searchShopId = canManageAllShops ? requestedSearchShopId : user.shopId;
       if (searchShopId && !requireShopScope(user, searchShopId)) {
         res.status(403).json({
           Result: -1,
@@ -3018,17 +3027,26 @@ export function createApp() {
     const user = req.session.user!;
     const scopedShopId = resolveScopedHistoryShopId(user, parseOptionalNumber(req.query.shopId));
     const filters = buildHistoryFilters(user, req.query);
+    const canManageAllShops = user.canAccessAllShops || user.role === "admin";
+    const effectiveShopId =
+      canManageAllShops
+        ? scopedShopId
+        : Number.isFinite(user.shopId) && user.shopId > 0
+          ? user.shopId
+          : scopedShopId;
 
     logPageAccess(req, "history", "Truy cap lich su thao tac", {
-      shopId: scopedShopId ?? user.shopId
+      shopId: effectiveShopId ?? user.shopId
     });
 
     const auditLogs = listAuditLogs(filters);
     const viewFilters = {
       ...filters,
-      shopId: scopedShopId ?? 0
+      shopId: effectiveShopId ?? 0
     };
-    const shopOptions = getScopedShopOptions(user);
+    const shopOptions = canManageAllShops
+      ? getScopedShopOptions(user)
+      : getScopedShopOptions(user).filter((shop) => shop.id === user.shopId);
     const installerOptions = getInstallerOptions(user);
     const buildPageUrl = (pageNumber: number) => {
       const queryString = buildHistoryQueryString({
@@ -3048,6 +3066,7 @@ export function createApp() {
       auditLogs,
       filters: viewFilters,
       shopOptions,
+      canManageAllShops,
       buildPageUrl,
       exportHistoryUrl,
       extraStyles: ["/public/history.css"],

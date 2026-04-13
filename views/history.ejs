@@ -83,13 +83,18 @@
               </label>
 
               <label class="history-field">
-                <span class="history-field__label">Cửa hàng</span>
-                <select class="form-control m-input" name="shopId">
-                  <option value="0">Tất cả</option>
+                <span class="history-field__label">Cua hang</span>
+                <select class="form-control m-input" name="shopId" <%= canManageAllShops ? "" : "disabled" %>>
+                  <% if (canManageAllShops) { %>
+                    <option value="0">Tat ca</option>
+                  <% } %>
                   <% shopOptions.forEach((shop) => { %>
                     <option value="<%= shop.id %>" <%= Number(filters.shopId || 0) === shop.id ? "selected" : "" %>><%= shop.name %></option>
                   <% }) %>
                 </select>
+                <% if (!canManageAllShops && Number(filters.shopId || 0) > 0) { %>
+                  <input type="hidden" name="shopId" value="<%= Number(filters.shopId || 0) %>">
+                <% } %>
               </label>
 
               <label class="history-field">

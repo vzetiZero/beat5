@@ -33,8 +33,8 @@ Có thể dùng đúng tên field hoặc tên tiếng Việt gần nghĩa. Các 
 ## Quy tắc dữ liệu
 
 - Ngày nhận các dạng: `dd/mm/yyyy`, `yyyy-mm-dd`, `yyyy/mm/dd`, hoặc serial date của Excel.
-- Tiền nhận các dạng: `5000000`, `5.000.000`, `5,000,000`, `5.000.000 đ`, `5000` nếu file đang nhập theo đơn vị nghìn.
-- Nếu phần lớn ô tiền trong 200 dòng đầu có giá trị nhỏ hơn `100000` và không có ký hiệu tiền/separator, hệ thống tự nhân `1000`.
+- Tiền nhận các dạng: `5000000`, `5.000.000`, `5,000,000`, `5.000.000 đ`.
+- Hệ thống giữ nguyên đơn vị số tiền đúng như dữ liệu trong file Excel upload, không tự quy đổi đơn vị nghìn.
 - Nếu không nhận diện được bất kỳ cột hợp lệ nào, import sẽ bị từ chối.
 - Nếu tất cả các dòng dữ liệu đều không hợp lệ, import sẽ bị từ chối.
 

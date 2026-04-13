@@ -292,8 +292,9 @@ function listShops(filters) {
         COALESCE(SUM(total_money), 0) AS totalMoney,
         COALESCE(AVG(CASE WHEN total_money > 0 THEN total_money END), 0) AS averageMoney
       FROM shops
+      ${whereSql}
     `)
-        .get();
+        .get(...bindings);
     const rows = db
         .prepare(`
       SELECT

@@ -87,25 +87,9 @@ const DEFAULT_COLUMN_FIELDS = [
     "status"
 ];
 const NORMALIZED_DEFAULT_COLUMN_FIELD_MAP = new Map(DEFAULT_COLUMN_FIELDS.map((field) => [normalizeHeader(field), field]));
-const IMPORT_MONEY_FIELDS = new Set([
-    "loanPackage",
-    "revenue",
-    "setupFee",
-    "netDisbursement",
-    "paidBefore",
-    "installmentAmount",
-    "referralFee"
-]);
 const IMPORT_FIELD_LABELS = {
-    loanPackage: "Gói vay",
-    revenue: "Doanh thu",
-    setupFee: "Phí cài máy",
-    netDisbursement: "Thực chi",
-    paidBefore: "Đóng trước",
-    installmentAmount: "Tiền đóng",
-    referralFee: "HH giới thiệu",
-    paymentDay: "Ngày đóng",
-    loanDate: "Ngày lên hợp đồng"
+    paymentDay: "Ngay dong",
+    loanDate: "Ngay len hop dong"
 };
 
 let dbInstance = null;
@@ -1308,65 +1292,6 @@ function toImportRecordFromCells(row, columnFields, rowNumber, shopId, shopName)
         normalizationMessages
     };
 }
-function rawMoneyValueLooksLikeThousandUnit(value) {
-    if (typeof value === "number" && Number.isFinite(value)) {
-        return Number.isInteger(value) && Math.abs(value) > 0 && Math.abs(value) < 100000;
-    }
-    const raw = String(value ?? "").trim();
-    if (!raw || /[₫đd]|vnđ|vnd/gi.test(raw) || /[.,]/.test(raw) || !/^-?\d+$/.test(raw)) {
-        return false;
-    }
-    const parsed = Number(raw);
-    return Number.isFinite(parsed) && Math.abs(parsed) > 0 && Math.abs(parsed) < 100000;
-}
-function detectImportMoneyMultiplier(dataRows, columnFields) {
-    let numericMoneyCellCount = 0;
-    let thousandUnitCellCount = 0;
-    for (const row of dataRows.slice(0, 200)) {
-        if (!Array.isArray(row)) {
-            continue;
-        }
-        row.forEach((value, index) => {
-            const field = columnFields[index];
-            if (!field || !IMPORT_MONEY_FIELDS.has(field)) {
-                return;
-            }
-            const parsed = parseNumericValue(value);
-            if (!Number.isFinite(parsed) || parsed === 0) {
-                return;
-            }
-            numericMoneyCellCount += 1;
-            if (rawMoneyValueLooksLikeThousandUnit(value)) {
-                thousandUnitCellCount += 1;
-            }
-        });
-    }
-    if (numericMoneyCellCount < 3) {
-        return 1;
-    }
-    return thousandUnitCellCount / numericMoneyCellCount >= 0.6 ? 1000 : 1;
-}
-function applyImportMoneyMultiplier(importRow, multiplier) {
-    if (!importRow) {
-        return importRow;
-    }
-    if (multiplier === 1) {
-        return importRow;
-    }
-    const nextRecord = { ...importRow.record };
-    for (const field of IMPORT_MONEY_FIELDS) {
-        const rawValue = importRow.mappedValues[field];
-        const currentValue = Number(nextRecord[field] || 0);
-        if (rawMoneyValueLooksLikeThousandUnit(rawValue) && currentValue !== 0) {
-            pushNormalizationMessage(importRow.normalizationMessages, `${IMPORT_FIELD_LABELS[field]} ${String(rawValue).trim()} được quy đổi thành ${formatCurrencyForImportLog(Math.round(currentValue * multiplier))}.`);
-        }
-        nextRecord[field] = Math.round(Number(nextRecord[field] || 0) * multiplier);
-    }
-    return {
-        ...importRow,
-        record: nextRecord
-    };
-}
 function buildImportNormalizationLogs(importRows) {
     return importRows
         .filter((item) => item && Array.isArray(item.normalizationMessages) && item.normalizationMessages.length > 0)
@@ -1584,9 +1509,8 @@ function importInstallmentsFromExcel(buffer, fileName, shopId, shopName) {
     if (recognizedColumnCount === 0) {
         throw new Error("Không nhận diện được cột hợp lệ trong file Excel. Vui lòng dùng đúng tiêu đề cột của hệ thống.");
     }
-    const moneyMultiplier = detectImportMoneyMultiplier(dataRows, columnFields);
     const importRows = dataRows
-        .map((row, index) => applyImportMoneyMultiplier(toImportRecordFromCells(Array.isArray(row) ? row : [], columnFields, index + 2, shopId, shopName), moneyMultiplier))
+        .map((row, index) => toImportRecordFromCells(Array.isArray(row) ? row : [], columnFields, index + 2, shopId, shopName))
         .filter((record) => Boolean(record));
     const records = importRows.map((item) => item.record);
     if (records.length === 0) {

@@ -244,6 +244,22 @@ test("admin can create, update and delete shop, staff, installment and permissio
   assert.equal(getShopById(createdShopId).name, "Shop Test A Updated");
   assert.equal(getShopById(createdShopId).totalMoney, 3500000);
 
+  const createSecondShopResponse = await adminAgent.post("/Shop/Create", {
+    form: {
+      name: "Shop Test B",
+      phone: "0909000099",
+      represent: "Nguoi Dai Dien B",
+      totalMoney: "500.000 ₫",
+      createdDate: "2026-04-05",
+      status: "1",
+      addressDetail: "789 Duong B",
+      provinceCode: province.code,
+      districtName: "Quan B",
+      wardCode: ward.code
+    }
+  });
+  assert.equal(createSecondShopResponse.status, 302);
+
   const existingInstallmentBeforeImport = saveInstallment({
     shopId: createdShopId,
     loanDate: "2026-04-01",
@@ -322,10 +338,6 @@ test("admin can create, update and delete shop, staff, installment and permissio
   assert.equal(importResult.importedRows, 1);
   assert.equal(importResult.normalizationLogs.length, 1);
   assert.ok(
-    importResult.normalizationLogs[0].messages.some((message) => message.includes("Gói vay 6500 được quy đổi thành 6.500.000 ₫")),
-    "Import should log thousand-unit normalization for Gói vay"
-  );
-  assert.ok(
     importResult.normalizationLogs[0].messages.some((message) => message.includes("Ngày đóng 7 được suy luận thành 07/04/2026")),
     "Import should log payment day inference"
   );
@@ -338,8 +350,8 @@ test("admin can create, update and delete shop, staff, installment and permissio
     "Import should append rows and keep existing shop data"
   );
   assert.equal(importedInstallmentList.lastImport.normalizationLogs.length, 1);
-  assert.equal(importedInstallment.loanPackage, 6500000);
-  assert.equal(importedInstallment.revenue, 8500000);
+  assert.equal(importedInstallment.loanPackage, 6500);
+  assert.equal(importedInstallment.revenue, 8500);
   assert.equal(importedInstallment.loanDate, "2026-04-05");
   assert.equal(importedInstallment.paymentDay, "2026-04-07");
   assert.equal(importedInstallment.paymentDayDisplay, "07/04/2026");
@@ -630,6 +642,21 @@ test("staff session is scoped and online badge counts concurrent sessions", { co
 
   const staffShopPage = await staffAgent.get("/Shop/Index/");
   assert.equal(staffShopPage.status, 200);
+  const staffShopListResponse = await staffAgent.get("/shop/api/list");
+  assert.equal(staffShopListResponse.status, 200);
+  const staffShopList = staffShopListResponse.json();
+  assert.equal(staffShopList.items.length, 1);
+  assert.equal(staffShopList.items[0].id, createdShopId);
+  assert.equal(staffShopList.dashboard.totalShops, 1);
+  assert.equal(staffShopList.dashboard.totalMoney, 3500000);
+  const scopedInstallmentResponse = await staffAgent.get("/installment/api/list");
+  assert.equal(scopedInstallmentResponse.status, 200);
+  const scopedInstallmentPayload = scopedInstallmentResponse.json();
+  assert.ok(Array.isArray(scopedInstallmentPayload.items));
+  assert.ok(scopedInstallmentPayload.items.length > 0);
+  assert.ok(scopedInstallmentPayload.items.every((item) => item.shopId === createdShopId));
+  assert.equal(scopedInstallmentPayload.dashboard.shopAvailability.length, 1);
+  assert.equal(scopedInstallmentPayload.dashboard.shopAvailability[0].shopId, createdShopId);
 
   const viewerShopPage = await viewerAgent.get("/Shop/Index/");
   assert.equal(viewerShopPage.status, 200);
@@ -642,6 +669,15 @@ test("staff session is scoped and online badge counts concurrent sessions", { co
   const scopedHistory = await staffAgent.get("/History/?generalSearch=Shop%20Test%20A%20Updated");
   assert.equal(scopedHistory.status, 200);
   assert.match(scopedHistory.text, /Shop Test A Updated|Chua co log nao/);
+  assert.doesNotMatch(scopedHistory.text, /Shop Test B/);
+  assert.doesNotMatch(scopedHistory.text, /<option value="0">/);
+
+  const scopedHistoryExport = await staffAgent.get("/History/Export?shopId=0");
+  assert.equal(scopedHistoryExport.status, 200);
+  assert.match(
+    scopedHistoryExport.headers.get("content-type") || "",
+    /application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet/
+  );
 });
 
 test("admin can delete created records during cleanup", { concurrency: false }, async () => {
