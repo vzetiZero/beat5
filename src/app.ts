@@ -35,6 +35,8 @@ import {
   transferInstallmentsToShop,
   previewInstallment,
   recordInstallmentPayment,
+  resetInstallmentPayment,
+  updateInstallmentPaymentAmount,
   updateInstallmentCollectionProgress,
   updateInstallmentNextPaymentDay,
   updateInstallmentStatus
@@ -1687,6 +1689,106 @@ export function createApp() {
       res.status(500).json({
         Result: -1,
         Message: error instanceof Error ? error.message : "Khong the cap nhat so tien khach dong."
+      });
+    }
+  });
+
+  app.post("/installment/api/payment/:id(\\d+)/edit", requireModulePermission("installment"), (req: Request, res: Response) => {
+    try {
+      const user = req.session.user!;
+      reconcileLegacyInstallmentsForUser(user);
+      const installmentId = Number(req.params.id);
+      const installment = getInstallmentById(installmentId);
+      if (!installment || !requireShopScope(user, installment.shopId)) {
+        res.status(403).json({
+          Result: -1,
+          Message: "Ban khong duoc sua thanh toan cua hop dong nay."
+        });
+        return;
+      }
+
+      const periodIndex = Number(req.body.periodIndex);
+      const amountPaid = Number(req.body.amountPaid);
+      const note = typeof req.body.note === "string" ? req.body.note : "";
+      const updated = updateInstallmentPaymentAmount(installmentId, periodIndex, amountPaid, note);
+      if (!updated) {
+        throw new Error("Khong the sua so tien da thu.");
+      }
+      safeWriteAuditLogFromRequest(user, req, {
+        moduleName: "installment",
+        actionType: "edit_payment",
+        entityType: "installment",
+        entityId: updated.id,
+        description: `Sua tien da thu ky ${periodIndex} cho hop dong tra gop ${updated.customerRef || updated.id}`,
+        shopId: updated.shopId,
+        shopName: updated.shopName,
+        metadata: {
+          periodIndex,
+          amountPaid,
+          note,
+          paidBefore: updated.paidBefore,
+          paymentDay: updated.paymentDay,
+          statusText: updated.statusText
+        }
+      });
+      res.json({
+        Result: 1,
+        Message: "Da cap nhat lai so tien da thu.",
+        Data: updated
+      });
+    } catch (error) {
+      res.status(500).json({
+        Result: -1,
+        Message: error instanceof Error ? error.message : "Khong the sua so tien da thu."
+      });
+    }
+  });
+
+  app.post("/installment/api/payment/:id(\\d+)/reset", requireModulePermission("installment"), (req: Request, res: Response) => {
+    try {
+      const user = req.session.user!;
+      reconcileLegacyInstallmentsForUser(user);
+      const installmentId = Number(req.params.id);
+      const installment = getInstallmentById(installmentId);
+      if (!installment || !requireShopScope(user, installment.shopId)) {
+        res.status(403).json({
+          Result: -1,
+          Message: "Ban khong duoc huy thanh toan cua hop dong nay."
+        });
+        return;
+      }
+
+      const periodIndex = Number(req.body.periodIndex);
+      const note = typeof req.body.note === "string" ? req.body.note : "";
+      const updated = resetInstallmentPayment(installmentId, periodIndex, note);
+      if (!updated) {
+        throw new Error("Khong the huy thanh toan ky nay.");
+      }
+      safeWriteAuditLogFromRequest(user, req, {
+        moduleName: "installment",
+        actionType: "reset_payment",
+        entityType: "installment",
+        entityId: updated.id,
+        description: `Huy thanh toan ky ${periodIndex} cho hop dong tra gop ${updated.customerRef || updated.id}`,
+        shopId: updated.shopId,
+        shopName: updated.shopName,
+        metadata: {
+          periodIndex,
+          note,
+          paidBefore: updated.paidBefore,
+          paymentDay: updated.paymentDay,
+          statusText: updated.statusText
+        }
+      });
+      res.json({
+        Result: 1,
+        Message: "Da huy thong tin da thu cua ky nay.",
+        Data: updated
+      });
+    } catch (error) {
+      res.status(500).json({
+        Result: -1,
+        Message: error instanceof Error ? error.message : "Khong the huy thanh toan ky nay."
       });
     }
   });

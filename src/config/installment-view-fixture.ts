@@ -489,6 +489,7 @@ function computeDashboard(items: InstallmentItemFixture[]) {
       summary.totalLoanPackage += item.loanPackage;
       summary.totalRevenue += item.revenue;
       summary.totalPaidBefore += item.paidBefore;
+      summary.totalInterestEarned += Math.max(0, item.paidBefore - item.loanPackage);
       summary.totalContracts += 1;
       return summary;
     },
@@ -497,6 +498,7 @@ function computeDashboard(items: InstallmentItemFixture[]) {
       totalLoanPackage: 0,
       totalRevenue: 0,
       totalPaidBefore: 0,
+      totalInterestEarned: 0,
       totalContracts: 0
     }
   );

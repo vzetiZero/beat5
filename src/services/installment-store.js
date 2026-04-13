@@ -55,6 +55,8 @@ exports.deleteInstallments = deleteInstallments;
 exports.updateInstallmentStatus = updateInstallmentStatus;
 exports.updateInstallmentCollectionProgress = updateInstallmentCollectionProgress;
 exports.recordInstallmentPayment = recordInstallmentPayment;
+exports.updateInstallmentPaymentAmount = updateInstallmentPaymentAmount;
+exports.resetInstallmentPayment = resetInstallmentPayment;
 exports.updateInstallmentNextPaymentDay = updateInstallmentNextPaymentDay;
 exports.previewInstallment = previewInstallment;
 exports.syncAllInstallmentStatuses = syncAllInstallmentStatuses;
@@ -1911,6 +1913,7 @@ function listInstallments(filters) {
         accumulator.totalRevenue += Number(item.revenue || 0);
         accumulator.totalNetDisbursement += Number(item.netDisbursement || 0);
         accumulator.totalPaidBefore += Number(item.paidBefore || 0);
+        accumulator.totalInterestEarned += Math.max(0, Number(item.paidBefore || 0) - Number(item.loanPackage || 0));
         accumulator.totalInstallmentAmount += Number(item.installmentAmount || 0);
         return accumulator;
     }, {
@@ -1918,6 +1921,7 @@ function listInstallments(filters) {
         totalRevenue: 0,
         totalNetDisbursement: 0,
         totalPaidBefore: 0,
+        totalInterestEarned: 0,
         totalInstallmentAmount: 0
     });
     const dashboardShopIds = sanitized.searchShopId !== null && sanitized.searchShopId > 0
@@ -1936,6 +1940,7 @@ function listInstallments(filters) {
         accumulator.totalRevenue += Number(item.revenue || 0);
         accumulator.totalNetDisbursement += Number(item.netDisbursement || 0);
         accumulator.totalPaidBefore += Number(item.paidBefore || 0);
+        accumulator.totalInterestEarned += Math.max(0, Number(item.paidBefore || 0) - Number(item.loanPackage || 0));
         accumulator.totalInstallmentAmount += Number(item.installmentAmount || 0);
         if (Number.isFinite(Number(item.loanDays)) && Number(item.loanDays) > 0) {
             accumulator.loanDaysTotal += Number(item.loanDays);
@@ -1960,6 +1965,7 @@ function listInstallments(filters) {
         totalRevenue: 0,
         totalNetDisbursement: 0,
         totalPaidBefore: 0,
+        totalInterestEarned: 0,
         totalInstallmentAmount: 0,
         loanDaysTotal: 0,
         loanDaysCount: 0,
@@ -1986,6 +1992,7 @@ function listInstallments(filters) {
             totalNetDisbursement: dashboard.totalNetDisbursement,
             totalShopInvestment: Number(shopSummary.summary?.totalMoney || 0),
             totalPaidBefore: dashboard.totalPaidBefore,
+            totalInterestEarned: dashboard.totalInterestEarned,
             totalInstallmentAmount: dashboard.totalInstallmentAmount,
             averageLoanDays: dashboard.loanDaysCount > 0 ? dashboard.loanDaysTotal / dashboard.loanDaysCount : 0,
             contractsTodayCount: dashboard.contractsTodayCount,
@@ -2719,6 +2726,106 @@ function recordInstallmentPayment(id, periodIndex, amountPaidInput, note = "") {
       `).run(installmentId, normalizedPeriodIndex, amountPaid, nextRemaining, paymentNote, nowIso);
     });
     runPayment();
+    return persistResolvedInstallmentStatus(installmentId);
+}
+function updateInstallmentPaymentAmount(id, periodIndex, amountPaidInput, note = "") {
+    const installmentId = Number(id);
+    const normalizedPeriodIndex = Number(periodIndex);
+    const nextAmountPaid = Math.max(0, Math.trunc(Number(amountPaidInput || 0)));
+    if (!Number.isFinite(installmentId) || installmentId <= 0) {
+        throw new Error("ID hợp đồng không hợp lệ.");
+    }
+    if (!Number.isFinite(normalizedPeriodIndex) || normalizedPeriodIndex <= 0) {
+        throw new Error("Kỳ thanh toán không hợp lệ.");
+    }
+    const installment = getInstallmentById(installmentId);
+    if (!installment) {
+        throw new Error("Không tìm thấy hợp đồng trả góp.");
+    }
+    const periods = Array.isArray(installment.periods) ? installment.periods : [];
+    const targetPeriod = periods.find((period) => Number(period.periodIndex) === normalizedPeriodIndex) || null;
+    if (!targetPeriod) {
+        throw new Error("Không tìm thấy kỳ thanh toán cần sửa.");
+    }
+    if (nextAmountPaid > Number(targetPeriod.amountDue || 0)) {
+        throw new Error(`Số tiền sửa vượt quá số tiền phải đóng của kỳ ${normalizedPeriodIndex}.`);
+    }
+    const hasLaterPayments = periods.some((period) => Number(period.periodIndex) > normalizedPeriodIndex && Number(period.amountPaid || 0) > 0);
+    if (hasLaterPayments) {
+        throw new Error("Chỉ được sửa kỳ đã thu gần nhất để tránh lệch tiến độ các kỳ sau.");
+    }
+    const db = getDb();
+    const nowIso = new Date().toISOString();
+    const remainingAfter = Math.max(0, Number(targetPeriod.amountDue || 0) - nextAmountPaid);
+    const paymentNote = String(note || "").trim() || `Điều chỉnh kỳ ${normalizedPeriodIndex} về ${nextAmountPaid.toLocaleString("vi-VN")} VNĐ`;
+    db.prepare(`
+      UPDATE installment_periods
+      SET
+        amount_paid = ?,
+        status = ?,
+        last_payment_at = ?,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE installment_id = ? AND period_index = ?
+    `).run(nextAmountPaid, normalizePeriodPaymentStatus(Number(targetPeriod.amountDue || 0), nextAmountPaid), nextAmountPaid > 0 ? nowIso : "", installmentId, normalizedPeriodIndex);
+    db.prepare(`
+      INSERT INTO installment_period_payment_logs (
+        installment_id,
+        period_index,
+        amount_paid,
+        remaining_after,
+        note,
+        created_at
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `).run(installmentId, normalizedPeriodIndex, nextAmountPaid, remainingAfter, paymentNote, nowIso);
+    return persistResolvedInstallmentStatus(installmentId);
+}
+function resetInstallmentPayment(id, periodIndex, note = "") {
+    const installmentId = Number(id);
+    const normalizedPeriodIndex = Number(periodIndex);
+    if (!Number.isFinite(installmentId) || installmentId <= 0) {
+        throw new Error("ID hợp đồng không hợp lệ.");
+    }
+    if (!Number.isFinite(normalizedPeriodIndex) || normalizedPeriodIndex <= 0) {
+        throw new Error("Kỳ thanh toán không hợp lệ.");
+    }
+    const installment = getInstallmentById(installmentId);
+    if (!installment) {
+        throw new Error("Không tìm thấy hợp đồng trả góp.");
+    }
+    const periods = Array.isArray(installment.periods) ? installment.periods : [];
+    const targetPeriod = periods.find((period) => Number(period.periodIndex) === normalizedPeriodIndex) || null;
+    if (!targetPeriod) {
+        throw new Error("Không tìm thấy kỳ thanh toán cần hủy.");
+    }
+    if (Number(targetPeriod.amountPaid || 0) <= 0) {
+        throw new Error(`Kỳ ${normalizedPeriodIndex} chưa có tiền đã thu để hủy.`);
+    }
+    const hasLaterPayments = periods.some((period) => Number(period.periodIndex) > normalizedPeriodIndex && Number(period.amountPaid || 0) > 0);
+    if (hasLaterPayments) {
+        throw new Error("Chỉ được hủy kỳ đã thu gần nhất để tránh lệch tiến độ các kỳ sau.");
+    }
+    const db = getDb();
+    const nowIso = new Date().toISOString();
+    const paymentNote = String(note || "").trim() || `Hủy thanh toán kỳ ${normalizedPeriodIndex}`;
+    db.prepare(`
+      UPDATE installment_periods
+      SET
+        amount_paid = 0,
+        status = 'unpaid',
+        last_payment_at = '',
+        updated_at = CURRENT_TIMESTAMP
+      WHERE installment_id = ? AND period_index = ?
+    `).run(installmentId, normalizedPeriodIndex);
+    db.prepare(`
+      INSERT INTO installment_period_payment_logs (
+        installment_id,
+        period_index,
+        amount_paid,
+        remaining_after,
+        note,
+        created_at
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `).run(installmentId, normalizedPeriodIndex, 0, Number(targetPeriod.amountDue || 0), paymentNote, nowIso);
     return persistResolvedInstallmentStatus(installmentId);
 }
 function updateInstallmentNextPaymentDay(id, nextPaymentDay) {

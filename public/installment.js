@@ -270,7 +270,7 @@
     if (els.cash) els.cash.textContent = money(dashboard.totalShopInvestment || 0);
     if (els.investment) els.investment.textContent = money(dashboard.totalLoanPackage || 0);
     if (els.interestExpected) els.interestExpected.textContent = money((dashboard.totalRevenue || 0) - (dashboard.totalLoanPackage || 0));
-    if (els.interestEarned) els.interestEarned.textContent = money(dashboard.totalPaidBefore || 0);
+    if (els.interestEarned) els.interestEarned.textContent = money(dashboard.totalInterestEarned || 0);
     if (els.totalContracts) els.totalContracts.textContent = money(dashboard.totalContracts || 0);
   }
 
@@ -532,7 +532,9 @@
     if (!tbody) return;
     tbody.innerHTML = schedule.map(function (row) {
       var actionButton = row.paid
-        ? '<button class="btn btn-sm btn-secondary" disabled><i class="fa fa-lock"></i> Đã đóng</button>'
+        ? (row.canEdit
+          ? '<button class="btn btn-sm btn-warning js-reset-payment" data-period-index="' + row.periodIndex + '"><i class="fa fa-undo"></i> Hủy</button>'
+          : '<button class="btn btn-sm btn-secondary" disabled><i class="fa fa-lock"></i> Đã đóng</button>')
         : (row.canPay ? '<button class="btn btn-sm btn-primary js-open-collect-payment" data-period-index="' + row.periodIndex + '"><i class="fa fa-money"></i> Thu tiền</button>' : '<button class="btn btn-sm btn-secondary" disabled>Chờ kỳ trước</button>');
       var statusBadge = row.paid
         ? '<span class="badge badge-success">Đã đóng</span>'
@@ -937,6 +939,21 @@
     await loadData();
   }
 
+  async function persistResetPayment(periodIndex) {
+    if (!state.activeDetailItem) return;
+    var payload = await request(String(config.paymentResetUrlBase || '/installment/api/payment') + '/' + encodeURIComponent(state.activeDetailItem.id) + '/reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        periodIndex: periodIndex,
+        note: 'Hủy thông tin đã thu kỳ ' + periodIndex
+      })
+    });
+    state.activeDetailItem = payload.item || payload.Data || payload.updated || payload;
+    fillDetailModal(state.activeDetailItem);
+    await loadData();
+  }
+
   if (els.btnGetData) els.btnGetData.addEventListener('click', function () { state.page = 1; loadData(); });
   if (els.btnResetSearch) els.btnResetSearch.addEventListener('click', function () {
     if (els.generalSearch) els.generalSearch.value = '';
@@ -1094,6 +1111,14 @@
     if (payBtn && state.activeDetailSchedule.length) {
       event.preventDefault();
       openCollectPaymentModal(Number(payBtn.getAttribute('data-period-index') || 0));
+      return;
+    }
+    var resetBtn = target.closest('.js-reset-payment');
+    if (resetBtn && state.activeDetailSchedule.length) {
+      event.preventDefault();
+      persistResetPayment(Number(resetBtn.getAttribute('data-period-index') || 0)).catch(function (error) {
+        notify('Không thể hủy thanh toán', error instanceof Error ? error.message : 'Không thể hủy thông tin đã thu.');
+      });
       return;
     }
   });
