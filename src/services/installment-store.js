@@ -1243,6 +1243,19 @@ function getDefaultInstallmentPriority(item) {
     }
     return 3;
 }
+function getInstallmentStatusKey(value) {
+    return String(value || "")
+        .trim()
+        .normalize("NFD")
+        .replace(/[đĐ]/g, "d")
+        .replace(/\p{Diacritic}/gu, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+}
+function normalizeStatusComparisonText(value) {
+    return String(value || "").trim().normalize("NFC");
+}
 function sanitizeFilters(filters) {
     const page = Math.max(1, Number(filters.page || 1));
     const perPage = Math.min(200, Math.max(10, Number(filters.perPage || 50)));
@@ -1251,6 +1264,7 @@ function sanitizeFilters(filters) {
     return {
         generalSearch: String(filters.generalSearch || "").trim(),
         status: typeof filters.status === "number" ? filters.status : null,
+        statusKey: String(filters.statusKey || "").trim(),
         statusText: String(filters.statusText || "").trim(),
         fromDate: String(filters.fromDate || "").trim(),
         toDate: String(filters.toDate || "").trim(),
@@ -1571,7 +1585,8 @@ function listInstallments(filters) {
                 ? allItems.filter((item) => Number(item.dueInDays) === 1)
                 : allItems.filter((item) => item.dueStatus === sanitized.dueStatus)
         : allItems)
-        .filter((item) => !sanitized.statusText || String(item.statusText || "").trim() === sanitized.statusText);
+        .filter((item) => !sanitized.statusKey || getInstallmentStatusKey(item.statusText) === sanitized.statusKey)
+        .filter((item) => !sanitized.statusText || normalizeStatusComparisonText(item.statusText) === normalizeStatusComparisonText(sanitized.statusText));
     const prioritizedItems = sortColumn === "loanDate" && sanitized.sortDirection === "desc"
         ? filteredItems
             .map((item, index) => ({ item, index }))
@@ -1590,7 +1605,8 @@ function listInstallments(filters) {
         const key = `${item.statusCode ?? 0}::${String(item.statusText || "").trim()}`;
         return [key, {
                 code: item.statusCode ?? 0,
-                label: item.statusText || `Trang thai ${item.statusCode ?? 0}`
+                label: item.statusText || `Trang thai ${item.statusCode ?? 0}`,
+                value: getInstallmentStatusKey(item.statusText || `Trang thai ${item.statusCode ?? 0}`)
             }];
     })).values());
     const recalculatedStatusSummaryMap = new Map();

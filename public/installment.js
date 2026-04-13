@@ -346,7 +346,10 @@
     }
     var html = items.map(function (item, index) {
       var rowNumber = ((state.page - 1) * state.perPage) + index + 1;
-      var dueClass = item.dueStatus ? ' installment-annam-row--' + item.dueStatus : '';
+      var dueClass = '';
+      if (item.statusText === 'Quá hạn') dueClass = ' installment-annam-row--overdue';
+      else if (item.statusText === 'Đến ngày trả góp') dueClass = ' installment-annam-row--due_today';
+      else if (item.statusText === 'Ngày mai đến ngày') dueClass = ' installment-annam-row--due_soon';
       var paidPeriods = Array.isArray(item.collectionProgress) ? item.collectionProgress.length : 0;
       var remainingMoney = getRemainingMoney(item);
       var remainingPeriods = Math.max(0, Math.ceil(remainingMoney / Math.max(1, Number(item.installmentAmount || 1))));
@@ -756,7 +759,7 @@
     var params = new URLSearchParams();
     params.set('generalSearch', state.generalSearch);
     params.set('SearchShopId', state.shopId);
-    params.set('StatusText', state.status);
+    params.set('StatusKey', state.status);
     params.set('DueStatus', state.dueStatus);
     params.set('LoanTime', state.loanTime);
     params.set('FromDate', state.fromDate);

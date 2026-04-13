@@ -1288,6 +1288,7 @@ export function createApp() {
         const result = listInstallments({
           generalSearch: String(req.query.generalSearch || ""),
           status: parseOptionalNumber(req.query.Status),
+          statusKey: String(req.query.StatusKey || ""),
           statusText: String(req.query.StatusText || ""),
           fromDate: String(req.query.FromDate || ""),
           toDate: String(req.query.ToDate || ""),

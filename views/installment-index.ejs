@@ -134,7 +134,7 @@
                   <select class="custom-select" id="m-search-status">
                     <option value="0">Tất cả hợp đồng</option>
                     <% bootstrap.availableStatuses.forEach((status) => { %>
-                      <option value="<%= status.label %>"><%= status.label %></option>
+                      <option value="<%= status.value || status.label %>"><%= status.label %></option>
                     <% }) %>
                   </select>
                 </div>
