@@ -34,6 +34,7 @@ import {
   transferInstallmentsInstallerNames,
   transferInstallmentsToShop,
   previewInstallment,
+  recordInstallmentPayment,
   updateInstallmentCollectionProgress,
   updateInstallmentNextPaymentDay,
   updateInstallmentStatus
@@ -1639,6 +1640,57 @@ export function createApp() {
     }
   });
 
+  app.post("/installment/api/payment/:id(\\d+)", requireModulePermission("installment"), (req: Request, res: Response) => {
+    try {
+      const user = req.session.user!;
+      reconcileLegacyInstallmentsForUser(user);
+      const installmentId = Number(req.params.id);
+      const installment = getInstallmentById(installmentId);
+      if (!installment || !requireShopScope(user, installment.shopId)) {
+        res.status(403).json({
+          Result: -1,
+          Message: "Ban khong duoc cap nhat thanh toan cua hop dong nay."
+        });
+        return;
+      }
+
+      const periodIndex = Number(req.body.periodIndex);
+      const amountPaid = Number(req.body.amountPaid);
+      const note = typeof req.body.note === "string" ? req.body.note : "";
+      const updated = recordInstallmentPayment(installmentId, periodIndex, amountPaid, note);
+      if (!updated) {
+        throw new Error("Khong the cap nhat so tien khach dong.");
+      }
+      safeWriteAuditLogFromRequest(user, req, {
+        moduleName: "installment",
+        actionType: "collect_payment",
+        entityType: "installment",
+        entityId: updated.id,
+        description: `Thu tien ky ${periodIndex} cho hop dong tra gop ${updated.customerRef || updated.id}`,
+        shopId: updated.shopId,
+        shopName: updated.shopName,
+        metadata: {
+          periodIndex,
+          amountPaid,
+          note,
+          paidBefore: updated.paidBefore,
+          paymentDay: updated.paymentDay,
+          statusText: updated.statusText
+        }
+      });
+      res.json({
+        Result: 1,
+        Message: "Da cap nhat so tien khach dong.",
+        Data: updated
+      });
+    } catch (error) {
+      res.status(500).json({
+        Result: -1,
+        Message: error instanceof Error ? error.message : "Khong the cap nhat so tien khach dong."
+      });
+    }
+  });
+
   app.get("/Shop/Index/", requireModulePermission("shop"), (req: Request, res: Response) => {
     const user = req.session.user!;
     const allowedShopIds = user.canAccessAllShops ? undefined : getAllowedShopIds(user);
@@ -1843,7 +1895,7 @@ export function createApp() {
       if (!shopSnapshot) {
         res.status(404).json({
           Result: -1,
-          Message: "Kh?ng t?m th?y d? li?u c?a h?ng ?? l?u v?o th?ng r?c."
+          Message: "lỗi"
         });
         return;
       }
@@ -1858,7 +1910,7 @@ export function createApp() {
         if (transferShopId === shopId) {
           res.status(400).json({
             Result: -1,
-            Message: "Kh?ng th? ch?n ch?nh c?a h?ng ?ang x?a l?m n?i nh?n d? li?u."
+            Message: "lỗi"
           });
           return;
         }
@@ -1866,7 +1918,7 @@ export function createApp() {
         if (transferShop && transferShop.status !== 1) {
           res.status(400).json({
             Result: -1,
-            Message: "C?a h?ng nh?n d? li?u ph?i ? tr?ng th?i ?ang ho?t ??ng."
+            Message: "lỗi"
           });
           return;
         }
@@ -1875,7 +1927,7 @@ export function createApp() {
       if (requiresTransfer && !transferShop) {
         res.status(400).json({
           Result: -1,
-          Message: "C?a h?ng n?y ?ang c? d? li?u li?n quan. Vui l?ng ch?n c?a h?ng nh?n d? li?u tr??c khi x?a."
+          Message: "lỗi"
         });
         return;
       }
@@ -1887,7 +1939,7 @@ export function createApp() {
       if (!deleted) {
         res.status(404).json({
           Result: -1,
-          Message: "Kh?ng t?m th?y c?a h?ng ?? x?a."
+          Message: "lỗi."
         });
         return;
       }
@@ -1946,7 +1998,7 @@ export function createApp() {
       if (ids.length === 0) {
         res.status(400).json({
           Result: -1,
-          Message: "Vui l?ng ch?n ?t nh?t m?t c?a h?ng."
+          Message: "lỗi."
         });
         return;
       }
@@ -1979,7 +2031,7 @@ export function createApp() {
         if (ids.includes(transferShopId)) {
           res.status(400).json({
             Result: -1,
-            Message: "Kh?ng th? ch?n c?a h?ng ?ang n?m trong danh s?ch x?a l?m n?i nh?n d? li?u."
+            Message: "lỗi"
           });
           return;
         }
@@ -1996,7 +2048,7 @@ export function createApp() {
       if (requiresTransfer && !transferShop) {
         res.status(400).json({
           Result: -1,
-          Message: "Danh s?ch x?a ?ang c? d? li?u li?n quan. Vui l?ng ch?n c?a h?ng nh?n d? li?u tr??c khi x?a."
+          Message: "lỗi"
         });
         return;
       }
@@ -2067,7 +2119,7 @@ export function createApp() {
       if (ids.length === 0) {
         res.status(400).json({
           Result: -1,
-          Message: "Vui l?ng ch?n ?t nh?t m?t c?a h?ng."
+          Message: "lỗi"
         });
         return;
       }
@@ -2853,7 +2905,7 @@ export function createApp() {
       req.session.flash = {
         type: "error",
         title: "Không thỒ xuất Excel",
-        text: error instanceof Error ? error.message : "Kh?ng th? xu?t d? li?u l?ch s? thao t?c.",
+        text: error instanceof Error ? error.message : "Lỗi.",
         mode: "modal"
       };
       res.redirect("/History/");

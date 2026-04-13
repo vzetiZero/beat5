@@ -292,6 +292,12 @@
                         <br>
                         <div><i class="m-portlet__head-text"><i class="fa fa-align-justify"></i> Lịch đóng tiền</i></div>
                         <div class="m-form__seperator m-form__seperator--dashed m-form__seperator--space"></div>
+                        <div class="alert alert-info" role="alert" id="installmentPaymentSummary">
+                          Kỳ hiện tại: <b id="lblCurrentPeriodLabel">-</b>.
+                          Cần đóng <b id="lblCurrentPeriodDue">0</b> VNĐ,
+                          đã đóng <b id="lblCurrentPeriodPaid">0</b> VNĐ,
+                          còn thiếu <b id="lblCurrentPeriodRemaining">0</b> VNĐ.
+                        </div>
                         <div class="installment-annam-inline-note">Lưu ý: Đối với điện thoại iOS, vui lòng vuốt 2 bên lịch để xem đầy đủ.</div>
                         <div class="table-responsive">
                           <table id="tbl_DongTien_list" class="table table-bordered m-table m-table--head-bg-gray table-hover">
@@ -300,6 +306,7 @@
                                 <th width="80px" class="text-center">STT</th>
                                 <th colspan="3" class="text-center">Ngày</th>
                                 <th width="150px" class="text-center">Tiền họ</th>
+                                <th class="text-center" style="padding:0 30px 10px;">Đã thu kỳ</th>
                                 <th class="text-center" style="padding:0 40px 10px;">Ngày giao dịch</th>
                                 <th class="text-center" style="padding:0 40px 10px;">Tiền Còn Phải Đóng</th>
                                 <th class="text-center"></th>
@@ -389,6 +396,39 @@
                   </div>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal fade" id="modal_collect_payment" tabindex="-1" role="dialog" aria-hidden="true">
+          <div class="modal-dialog" role="document">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title"><b>Thu tiền kỳ trả góp</b></h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">×</span></button>
+              </div>
+              <div class="modal-body">
+                <input type="hidden" id="collectPaymentInstallmentId" value="">
+                <input type="hidden" id="collectPaymentPeriodIndex" value="">
+                <div class="alert alert-warning" role="alert" id="collectPaymentHint">
+                  Kỳ <b id="collectPaymentPeriodLabel">-</b> còn thiếu <b id="collectPaymentRemainingLabel">0</b> VNĐ.
+                </div>
+                <div class="form-group">
+                  <label for="collectPaymentAmount">Số tiền khách đóng <span class="text-danger">*</span></label>
+                  <input type="text" class="form-control m-input" id="collectPaymentAmount" inputmode="numeric" placeholder="Nhập số tiền khách đóng">
+                  <div class="m--margin-top-10">
+                    <button type="button" class="btn btn-sm btn-secondary" id="btnFillCollectPaymentFull">Đóng đủ số còn thiếu</button>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label for="collectPaymentNote">Ghi chú</label>
+                  <textarea class="form-control m-input" id="collectPaymentNote" rows="3" placeholder="Ví dụ: khách thiếu 1.500.000 kỳ 2"></textarea>
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Đóng</button>
+                <button type="button" class="btn btn-primary" id="btnSubmitCollectPayment">Lưu thanh toán</button>
+              </div>
             </div>
           </div>
         </div>
@@ -484,6 +524,14 @@
                         <div class="form-group m-form__group row">
                           <label class="col-lg-3 col-sm-12 col-12 col-form-label font-weight-bold">Ngày bốc <span class="text-danger">*</span></label>
                           <div class="customize-responsive col-lg-3 col-sm-12 col-12"><div class="input-group m-input-group"><input type="date" class="form-control m-input" id="txtStrFromDate" name="txtStrFromDate"><span class="input-group-addon"><i class="la la-calendar text-black"></i></span></div></div>
+                          <div class="col-lg-6">
+                            <label class="m-checkbox m-checkbox--solid m-checkbox--brand m-checkbox--inline m--margin-top-10">
+                              <input type="checkbox" id="chkCollectInAdvance" name="chkCollectInAdvance">
+                              Đã đóng kỳ đầu
+                              <span></span>
+                            </label>
+                            <div class="small text-muted m--margin-top-5">Nếu tích, kỳ đầu được tính là đã đóng và ngày phải đóng sẽ chuyển sang đầu kỳ kế tiếp.</div>
+                          </div>
                         </div>
 
                         <div class="form-group m-form__group row">
@@ -605,6 +653,7 @@
     bulkDeleteUrl: "/installment/api/bulk-delete",
     bulkStatusUrl: "/installment/api/bulk-status",
     progressUrlBase: "/installment/api/progress",
+    paymentUrlBase: "/installment/api/payment",
     nextDateUrlBase: "/installment/api",
     defaultShopId: <%= defaultShopId %>,
     contextShopId: <%= currentUser && currentUser.shopId ? currentUser.shopId : 0 %>,

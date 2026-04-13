@@ -48,6 +48,8 @@
     btnUpdateNextDate: document.getElementById('btnUpdateNextDate'),
     btnDongHopDongVayHo: document.getElementById('btnDongHopDongVayHo'),
     btnSaveInstallment: document.getElementById('btnSaveInstallment'),
+    btnSubmitCollectPayment: document.getElementById('btnSubmitCollectPayment'),
+    btnFillCollectPaymentFull: document.getElementById('btnFillCollectPaymentFull'),
     dashboardReloadLink: document.getElementById('dashboardReloadLink'),
     excelFileInput: document.getElementById('excelFileInput'),
     deleteInstallmentMessage: document.getElementById('deleteInstallmentMessage'),
@@ -59,6 +61,16 @@
     nextDateInput: document.getElementById('txtUpdate_NextDate'),
     nextDateHistoryTableBody: document.getElementById('nextDateHistoryTableBody'),
     installmentHistoryTableBody: document.getElementById('installmentHistoryTableBody'),
+    collectPaymentInstallmentId: document.getElementById('collectPaymentInstallmentId'),
+    collectPaymentPeriodIndex: document.getElementById('collectPaymentPeriodIndex'),
+    collectPaymentAmount: document.getElementById('collectPaymentAmount'),
+    collectPaymentNote: document.getElementById('collectPaymentNote'),
+    collectPaymentPeriodLabel: document.getElementById('collectPaymentPeriodLabel'),
+    collectPaymentRemainingLabel: document.getElementById('collectPaymentRemainingLabel'),
+    currentPeriodLabel: document.getElementById('lblCurrentPeriodLabel'),
+    currentPeriodDue: document.getElementById('lblCurrentPeriodDue'),
+    currentPeriodPaid: document.getElementById('lblCurrentPeriodPaid'),
+    currentPeriodRemaining: document.getElementById('lblCurrentPeriodRemaining'),
     createForm: document.getElementById('installmentCreateForm'),
     titleFormPawn: document.getElementById('titleFormPawn'),
     popupShopId: document.getElementById('popupShopId'),
@@ -70,6 +82,7 @@
     txtLoanTime: document.getElementById('txtLoanTime'),
     txtFrequency: document.getElementById('txtFrequency'),
     txtStrFromDate: document.getElementById('txtStrFromDate'),
+    chkCollectInAdvance: document.getElementById('chkCollectInAdvance'),
     txtNote: document.getElementById('txtNote'),
     rateTypeSelected: document.getElementById('ratetype-selected'),
     rateTypeInput: document.getElementById('m-select-ratetype_create'),
@@ -284,6 +297,27 @@
     return '<span class="m-badge ' + cls + ' m-badge--wide" style="font-size:12px">' + escapeHtml(statusText) + '</span>';
   }
 
+  function getStatusDetail(item) {
+    if (!item) return '';
+    var currentPeriod = item.currentPeriod || null;
+    var remaining = currentPeriod ? Number(currentPeriod.amountRemaining || 0) : Math.max(0, Number(item.revenue || 0) - Number(item.paidBefore || 0));
+    var parts = [];
+    if (remaining > 0 && String(item.statusText || '').trim() !== 'Đã đóng') {
+      parts.push('Thiếu ' + money(remaining) + ' VNĐ');
+    }
+    if (item.dueInDays != null && Number(item.dueInDays) < 0) {
+      parts.push('Trễ ' + Math.abs(Number(item.dueInDays)) + ' ngày');
+    } else if (item.dueInDays === 0) {
+      parts.push('Đến hạn hôm nay');
+    } else if (item.dueInDays === 1) {
+      parts.push('Đến hạn ngày mai');
+    }
+    if (currentPeriod && currentPeriod.periodIndex) {
+      parts.push('Kỳ ' + currentPeriod.periodIndex);
+    }
+    return parts.length ? '<div class="installment-annam-status-detail">' + escapeHtml(parts.join(' • ')) + '</div>' : '';
+  }
+
   function renderCalendarTotalRow(items) {
     if (config.pageMode !== 'calendar' || !Array.isArray(items) || !items.length) return '';
     var totals = items.reduce(function (accumulator, item) {
@@ -364,7 +398,7 @@
         '<td class="m-datatable__cell--right m-datatable__cell"><span style="width:120px;"><div><div class="m-card-user__details"><span class="m-card-user__name">' + money(item.paidBefore) + '</span><br><a href="#" class="m-card-user__email m-link small">(' + money(paidPeriods) + ' kỳ)</a></div></div></span></td>',
         '<td class="m-datatable__cell--right m-datatable__cell"><span style="width:100px;"><div><div class="m-card-user__details"><span class="m-card-user__name">' + money(item.installmentAmount) + '</span><br><small>/ 1 kỳ</small></div></div></span></td>',
         '<td class="m-datatable__cell--right m-datatable__cell"><span style="width:120px;"><div><div class="m-card-user__details"><span class="m-card-user__name">' + money(remainingMoney) + '</span><br><a href="#" class="m-card-user__email m-link small">(' + money(remainingPeriods) + ' kỳ)</a></div></div></span></td>',
-        '<td class="m-datatable__cell--center m-datatable__cell"><span style="width:110px;">' + getStatusBadge(item) + '</span></td>',
+        '<td class="m-datatable__cell--center m-datatable__cell"><span style="width:140px;">' + getStatusBadge(item) + getStatusDetail(item) + '</span></td>',
         '<td class="m-datatable__cell--center m-datatable__cell"><span style="width:110px;"><a href="#" class="js-open-next-date installment-annam-inline-action" data-id="' + item.id + '" title="Cập nhật ngày đóng"><i class="fa fa-calendar"></i><span>' + escapeHtml(dateText(item.paymentDayDisplay || item.paymentDay || '')) + '</span></a></span></td>',
         '<td class="m-datatable__cell installment-annam-sticky-action"><span style="width:190px;" class="installment-annam-action-group"><button class="btn btn-sm installment-annam-action installment-annam-action--collect js-open-detail" type="button" data-id="' + item.id + '" title="Đóng tiền" aria-label="Đóng tiền"><img src="/public/assets/pay.svg" alt="Đóng tiền" style="width:16px; height:16px;"></button> <button class="btn btn-sm installment-annam-action installment-annam-action--calendar js-open-next-date" type="button" data-id="' + item.id + '" title="Cập nhật ngày đóng" aria-label="Cập nhật ngày đóng"><i class="fa fa-calendar"></i></button> <button class="btn btn-sm installment-annam-action installment-annam-action--edit js-open-edit" type="button" data-id="' + item.id + '" title="Sửa hợp đồng" aria-label="Sửa hợp đồng"><img src="/public/assets/update.svg" alt="Sửa hợp đồng" style="width:16px; height:16px;"></button> <button class="btn btn-sm installment-annam-action installment-annam-action--delete js-open-delete" type="button" data-id="' + item.id + '" title="Xóa hợp đồng" aria-label="Xóa hợp đồng"><img src="/public/assets/delete.svg" alt="Xóa hợp đồng" style="width:16px; height:16px;"></button></span></td>',
         '</tr>'
@@ -385,52 +419,69 @@
   }
 
   function buildDetailSchedule(item) {
-    var loanDays = Math.max(1, Number(item.loanDays || 0) || 1);
-    var intervalDays = Math.max(1, Number(item.collectionIntervalDays || 1) || 1);
-    var periods = Math.max(1, Math.ceil(loanDays / intervalDays));
-    var revenue = Math.max(0, Number(item.revenue || 0));
-    var baseAmount = Math.floor(revenue / periods);
-    var remainder = revenue - (baseAmount * periods);
-    var progressSet = new Set((Array.isArray(item.collectionProgress) ? item.collectionProgress : []).map(Number));
+    var periods = Array.isArray(item && item.periods) ? item.periods : [];
     var today = new Date().toISOString().slice(0, 10);
-    var lastPaidIndex = 0;
-    progressSet.forEach(function (value) { if (value > lastPaidIndex) lastPaidIndex = value; });
-    var firstUnpaidIndex = lastPaidIndex + 1;
+    var firstUnpaidIndex = 0;
+    periods.some(function (period) {
+      if (Number(period.amountRemaining || 0) > 0) {
+        firstUnpaidIndex = Number(period.periodIndex || 0);
+        return true;
+      }
+      return false;
+    });
     var rows = [];
-
-    for (var index = 0; index < periods; index += 1) {
-      var periodIndex = index + 1;
-      var dueDate = addDays(item.loanDate, Math.min(loanDays, (index + 1) * intervalDays));
-      var fromDate = index === 0 ? item.loanDate : addDays(item.loanDate, index * intervalDays);
-      var amount = baseAmount + (index < remainder ? 1 : 0);
-      var paid = progressSet.has(periodIndex);
+    periods.forEach(function (period) {
+      var periodIndex = Number(period.periodIndex || 0);
+      var amount = Number(period.amountDue || 0);
+      var amountPaid = Number(period.amountPaid || 0);
+      var remaining = Math.max(0, Number(period.amountRemaining || 0));
+      var paid = remaining <= 0;
+      var dueDate = period.dueDate || '';
       var dueDiff = daysBetween(today, dueDate);
       var statusText = 'Chờ thu';
       if (paid) statusText = 'Đã đóng';
       else if (dueDiff !== null && dueDiff < 0) statusText = 'Quá hạn ' + Math.abs(dueDiff) + ' ngày';
       else if (dueDiff === 0) statusText = 'Đến hạn hôm nay';
+      else if (dueDiff === 1) statusText = 'Ngày mai đến kỳ';
       else if (dueDiff !== null && dueDiff <= 3) statusText = 'Sắp đến hạn';
       rows.push({
         id: periodIndex,
         periodIndex: periodIndex,
-        fromDate: fromDate,
-        toDate: dueDate,
+        fromDate: period.fromDate || '',
+        toDate: period.toDate || '',
         dueDate: dueDate,
         amount: amount,
+        amountPaid: amountPaid,
         paid: paid,
-        remaining: paid ? 0 : amount,
-        paymentDate: paid ? dueDate : '',
+        remaining: remaining,
+        paymentDate: period.lastPaymentAt || '',
         statusText: statusText,
         canPay: !paid && periodIndex === firstUnpaidIndex,
-        canCancel: paid && periodIndex === lastPaidIndex
+        isCurrentDebt: !paid && periodIndex === firstUnpaidIndex
       });
-    }
+    });
     return rows;
   }
 
   function renderHistoryRows() {
     if (!els.installmentHistoryTableBody) return;
-    els.installmentHistoryTableBody.innerHTML = '<tr><td colspan="4" class="installment-annam-empty">Lịch sử thao tác chi tiết hiện chưa được lưu riêng. Audit log tổng vẫn hoạt động ở module Lịch sử.</td></tr>';
+    var logs = state.activeDetailItem && Array.isArray(state.activeDetailItem.paymentLogs) ? state.activeDetailItem.paymentLogs : [];
+    if (!logs.length) {
+      els.installmentHistoryTableBody.innerHTML = '<tr><td colspan="4" class="installment-annam-empty">Chưa có lần đóng thêm nào được ghi nhận.</td></tr>';
+      return;
+    }
+    els.installmentHistoryTableBody.innerHTML = logs.map(function (log) {
+      var createdAt = String(log.createdAt || '');
+      var createdDate = createdAt ? (dateText(createdAt.slice(0, 10)) + (createdAt.slice(11, 16) ? ' ' + createdAt.slice(11, 16) : '')) : '-';
+      var action = 'Đóng ' + money(log.amountPaid || 0) + ' VNĐ cho kỳ ' + log.periodIndex;
+      var note = log.note || ('Còn thiếu ' + money(log.remainingAfter || 0) + ' VNĐ sau giao dịch');
+      return '<tr>' +
+        '<td>' + escapeHtml(createdDate) + '</td>' +
+        '<td>Hệ thống</td>' +
+        '<td>' + escapeHtml(action) + '</td>' +
+        '<td>' + escapeHtml(note) + '</td>' +
+      '</tr>';
+    }).join('');
   }
 
   function renderNextDateHistoryRows(item) {
@@ -481,17 +532,18 @@
     if (!tbody) return;
     tbody.innerHTML = schedule.map(function (row) {
       var actionButton = row.paid
-        ? (row.canCancel ? '<button class="btn btn-sm btn-warning js-cancel-schedule" data-period-index="' + row.periodIndex + '"><i class="fa fa-undo"></i> Hủy</button>' : '<button class="btn btn-sm btn-secondary" disabled><i class="fa fa-lock"></i> Đã khóa</button>')
-        : (row.canPay ? '<button class="btn btn-sm btn-primary js-pay-schedule" data-period-index="' + row.periodIndex + '"><i class="fa fa-check"></i> Đóng</button>' : '<button class="btn btn-sm btn-secondary" disabled>Chờ kỳ trước</button>');
+        ? '<button class="btn btn-sm btn-secondary" disabled><i class="fa fa-lock"></i> Đã đóng</button>'
+        : (row.canPay ? '<button class="btn btn-sm btn-primary js-open-collect-payment" data-period-index="' + row.periodIndex + '"><i class="fa fa-money"></i> Thu tiền</button>' : '<button class="btn btn-sm btn-secondary" disabled>Chờ kỳ trước</button>');
       var statusBadge = row.paid
         ? '<span class="badge badge-success">Đã đóng</span>'
         : '<span class="badge badge-danger">' + escapeHtml(row.statusText) + '</span>';
-      return '<tr data-period-index="' + row.periodIndex + '">' +
+      return '<tr data-period-index="' + row.periodIndex + '" class="' + (row.isCurrentDebt ? 'installment-annam-schedule-row--current' : '') + '">' +
         '<td class="text-center">' + row.periodIndex + '</td>' +
         '<td class="text-center">' + escapeHtml(dateText(row.fromDate)) + '</td>' +
         '<td class="text-center">-&gt;</td>' +
         '<td class="text-center">' + escapeHtml(dateText(row.toDate)) + '</td>' +
         '<td class="text-right">' + money(row.amount) + '</td>' +
+        '<td class="text-right">' + money(row.amountPaid) + '</td>' +
         '<td class="text-center">' + escapeHtml(dateText(row.paymentDate) || '-') + '</td>' +
         '<td class="text-right">' + money(row.remaining) + '</td>' +
         '<td class="text-center">' + actionButton + '</td>' +
@@ -520,6 +572,11 @@
     document.getElementById('lblTotalMoneyCurrent').textContent = money(getRemainingMoney(item));
     document.getElementById('lblTotalInterest').textContent = money((item.revenue || 0) - (item.loanPackage || 0));
     document.getElementById('model_pawn_header').textContent = 'Bảng chi tiết Hợp đồng - ' + (item.customerRef || ('HĐ #' + item.id));
+    var currentPeriod = item && item.currentPeriod ? item.currentPeriod : null;
+    if (els.currentPeriodLabel) els.currentPeriodLabel.textContent = currentPeriod ? ('Kỳ ' + currentPeriod.periodIndex) : '-';
+    if (els.currentPeriodDue) els.currentPeriodDue.textContent = money(currentPeriod ? currentPeriod.amountDue : 0);
+    if (els.currentPeriodPaid) els.currentPeriodPaid.textContent = money(currentPeriod ? currentPeriod.amountPaid : 0);
+    if (els.currentPeriodRemaining) els.currentPeriodRemaining.textContent = money(currentPeriod ? currentPeriod.amountRemaining : 0);
     if (els.closeContractRemaining) els.closeContractRemaining.textContent = money(getRemainingMoney(item));
     renderScheduleRows(state.activeDetailSchedule);
     renderDuePaymentRows(item);
@@ -627,6 +684,7 @@
     if (els.txtLoanTime) els.txtLoanTime.value = item ? String(item.loanDays || 30) : '30';
     if (els.txtFrequency) els.txtFrequency.value = item ? String(item.collectionIntervalDays || 1) : '1';
     if (els.txtStrFromDate) els.txtStrFromDate.value = item ? toDateValue(item.loanDate) : new Date().toISOString().slice(0, 10);
+    if (els.chkCollectInAdvance) els.chkCollectInAdvance.checked = item ? Number(item.prepaidPeriodCount || 0) > 0 : false;
     if (els.txtNote) els.txtNote.value = item ? String(item.note || '') : '';
     if (els.staffInput) els.staffInput.value = item ? String(item.installerName || '') : String((config.installerOptions && config.installerOptions[0] && config.installerOptions[0].value) || '');
     if (els.staffSelected) els.staffSelected.textContent = item ? String(item.installerName || '') : String((config.installerOptions && config.installerOptions[0] && config.installerOptions[0].label) || '');
@@ -655,6 +713,7 @@
       loanDays: Number(els.txtLoanTime ? els.txtLoanTime.value : 0),
       collectionIntervalDays: Number(els.txtFrequency ? els.txtFrequency.value : 1),
       loanDate: els.txtStrFromDate ? els.txtStrFromDate.value : '',
+      collectInAdvance: !!(els.chkCollectInAdvance && els.chkCollectInAdvance.checked),
       note: els.txtNote ? els.txtNote.value.trim() : '',
       installerName: els.staffInput ? els.staffInput.value : '',
       paymentMethod: 'periodic',
@@ -830,6 +889,54 @@
     await loadData();
   }
 
+  function openCollectPaymentModal(periodIndex) {
+    if (!state.activeDetailItem || !state.activeDetailSchedule.length) return;
+    var row = state.activeDetailSchedule.find(function (item) { return Number(item.periodIndex) === Number(periodIndex); });
+    if (!row) return;
+    if (els.collectPaymentInstallmentId) els.collectPaymentInstallmentId.value = String(state.activeDetailItem.id || '');
+    if (els.collectPaymentPeriodIndex) els.collectPaymentPeriodIndex.value = String(row.periodIndex || '');
+    if (els.collectPaymentPeriodLabel) els.collectPaymentPeriodLabel.textContent = String(row.periodIndex || '-');
+    if (els.collectPaymentRemainingLabel) els.collectPaymentRemainingLabel.textContent = money(row.remaining || 0);
+    if (els.collectPaymentAmount) setMoneyInputValue(els.collectPaymentAmount, row.remaining || 0);
+    if (els.collectPaymentNote) {
+      els.collectPaymentNote.value = row.remaining > 0
+        ? ('Còn thiếu ' + money(row.remaining) + ' kỳ ' + row.periodIndex)
+        : '';
+    }
+    showModal('#modal_collect_payment');
+  }
+
+  function fillCollectPaymentFullAmount() {
+    var periodIndex = Number(els.collectPaymentPeriodIndex ? els.collectPaymentPeriodIndex.value : 0);
+    if (!periodIndex || !els.collectPaymentAmount) return;
+    var row = state.activeDetailSchedule.find(function (item) { return Number(item.periodIndex) === periodIndex; });
+    if (!row) return;
+    setMoneyInputValue(els.collectPaymentAmount, row.remaining || 0);
+  }
+
+  async function persistCollectPayment() {
+    if (!state.activeDetailItem) return;
+    var periodIndex = Number(els.collectPaymentPeriodIndex ? els.collectPaymentPeriodIndex.value : 0);
+    var amountPaid = parseMoneyInput(els.collectPaymentAmount ? els.collectPaymentAmount.value : 0);
+    var note = els.collectPaymentNote ? els.collectPaymentNote.value.trim() : '';
+    if (!periodIndex || amountPaid <= 0) {
+      throw new Error('Cần nhập số tiền khách đóng lớn hơn 0.');
+    }
+    var payload = await request(String(config.paymentUrlBase || '/installment/api/payment') + '/' + encodeURIComponent(state.activeDetailItem.id), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        periodIndex: periodIndex,
+        amountPaid: amountPaid,
+        note: note
+      })
+    });
+    state.activeDetailItem = payload.item || payload.Data || payload.updated || payload;
+    fillDetailModal(state.activeDetailItem);
+    hideModal('#modal_collect_payment');
+    await loadData();
+  }
+
   if (els.btnGetData) els.btnGetData.addEventListener('click', function () { state.page = 1; loadData(); });
   if (els.btnResetSearch) els.btnResetSearch.addEventListener('click', function () {
     if (els.generalSearch) els.generalSearch.value = '';
@@ -893,7 +1000,7 @@
     node.addEventListener('change', function () { state.page = 1; loadData(); });
   });
   [els.txtTotalMoney, els.txtLoanTime, els.txtFrequency].forEach(function (node) { if (node) node.addEventListener('input', updatePerCyclePreview); });
-  [els.txtCustomer, els.txtTotalMoney, els.txtTotalMoneyReceived, els.txtLoanTime, els.txtFrequency, els.txtStrFromDate, els.popupShopId, els.txtNote].forEach(function (node) {
+  [els.txtCustomer, els.txtTotalMoney, els.txtTotalMoneyReceived, els.txtLoanTime, els.txtFrequency, els.txtStrFromDate, els.popupShopId, els.txtNote, els.chkCollectInAdvance].forEach(function (node) {
     if (!node) return;
     node.addEventListener('input', queuePreview);
     node.addEventListener('change', queuePreview);
@@ -937,13 +1044,6 @@
     if (detailBtn) {
       event.preventDefault();
       var detailId = Number(detailBtn.getAttribute('data-id') || 0);
-      var detailItem = state.items.find(function (item) { return Number(item.id) === detailId; })
-        || state.tomorrowDueItems.find(function (item) { return Number(item.id) === detailId; });
-      if (detailItem) {
-        fillDetailModal(detailItem);
-        showModal('#modal_details_pawn');
-        return;
-      }
       request(String(config.detailUrlBase || '/installment/api') + '/' + encodeURIComponent(detailId), {
         headers: { Accept: 'application/json' }
       }).then(function (payload) {
@@ -990,25 +1090,11 @@
       queuePreview();
       return;
     }
-    var payBtn = target.closest('.js-pay-schedule');
+    var payBtn = target.closest('.js-open-collect-payment');
     if (payBtn && state.activeDetailSchedule.length) {
       event.preventDefault();
-      var paidIndices = state.activeDetailSchedule.filter(function (row) { return row.paid; }).map(function (row) { return row.periodIndex; });
-      paidIndices.push(Number(payBtn.getAttribute('data-period-index') || 0));
-      paidIndices = paidIndices.filter(function (value, index, source) { return value > 0 && source.indexOf(value) === index; }).sort(function (a, b) { return a - b; });
-      persistScheduleProgress(paidIndices).catch(function (error) {
-        notify('Không thể cập nhật tiến độ', error instanceof Error ? error.message : 'Không thể cập nhật tiến độ đóng tiền.');
-      });
+      openCollectPaymentModal(Number(payBtn.getAttribute('data-period-index') || 0));
       return;
-    }
-    var cancelBtn = target.closest('.js-cancel-schedule');
-    if (cancelBtn && state.activeDetailSchedule.length) {
-      event.preventDefault();
-      var cancelIndex = Number(cancelBtn.getAttribute('data-period-index') || 0);
-      var remainingIndices = state.activeDetailSchedule.filter(function (row) { return row.paid && row.periodIndex < cancelIndex; }).map(function (row) { return row.periodIndex; });
-      persistScheduleProgress(remainingIndices).catch(function (error) {
-        notify('Không thể hủy thanh toán', error instanceof Error ? error.message : 'Không thể hủy thanh toán kỳ này.');
-      });
     }
   });
 
@@ -1048,8 +1134,20 @@
     });
   }
 
+  if (els.btnSubmitCollectPayment) {
+    els.btnSubmitCollectPayment.addEventListener('click', function () {
+      persistCollectPayment().catch(function (error) {
+        notify('Không thể lưu thanh toán', error instanceof Error ? error.message : 'Không thể lưu thanh toán kỳ này.');
+      });
+    });
+  }
+  if (els.btnFillCollectPaymentFull) {
+    els.btnFillCollectPaymentFull.addEventListener('click', fillCollectPaymentFullAmount);
+  }
+
   bindMoneyInput(els.txtTotalMoney);
   bindMoneyInput(els.txtTotalMoneyReceived);
+  bindMoneyInput(els.collectPaymentAmount);
   setMoneyInputValue(els.txtTotalMoney, els.txtTotalMoney ? els.txtTotalMoney.value : 0);
   setMoneyInputValue(els.txtTotalMoneyReceived, els.txtTotalMoneyReceived ? els.txtTotalMoneyReceived.value : 0);
   renderInstallerOptions();

@@ -204,6 +204,14 @@
   text-decoration: none;
 }
 
+.installment-annam-status-detail {
+  color: #6b7280;
+  font-size: 11px;
+  line-height: 1.45;
+  margin-top: 6px;
+  white-space: normal;
+}
+
 .installment-annam-action-group {
   align-items: center;
   display: inline-flex;
@@ -418,6 +426,15 @@
 
 #tbl_DongTien_list .m-checkbox {
   margin: 0;
+}
+
+.installment-annam-schedule-row--current {
+  background: #fff7df;
+}
+
+.installment-annam-schedule-row--current td {
+  border-top: 2px solid #f0b429;
+  border-bottom: 2px solid #f0b429;
 }
 
 @media (max-width: 991px) {

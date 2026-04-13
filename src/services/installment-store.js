@@ -54,6 +54,7 @@ exports.deleteInstallment = deleteInstallment;
 exports.deleteInstallments = deleteInstallments;
 exports.updateInstallmentStatus = updateInstallmentStatus;
 exports.updateInstallmentCollectionProgress = updateInstallmentCollectionProgress;
+exports.recordInstallmentPayment = recordInstallmentPayment;
 exports.updateInstallmentNextPaymentDay = updateInstallmentNextPaymentDay;
 exports.previewInstallment = previewInstallment;
 exports.syncAllInstallmentStatuses = syncAllInstallmentStatuses;
@@ -302,6 +303,32 @@ function getDb() {
       skipped_rows INTEGER NOT NULL DEFAULT 0,
       imported_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS installment_periods (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      installment_id INTEGER NOT NULL,
+      period_index INTEGER NOT NULL,
+      from_date TEXT NOT NULL DEFAULT '',
+      to_date TEXT NOT NULL DEFAULT '',
+      due_date TEXT NOT NULL DEFAULT '',
+      amount_due INTEGER NOT NULL DEFAULT 0,
+      amount_paid INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'unpaid',
+      last_payment_at TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(installment_id, period_index)
+    );
+
+    CREATE TABLE IF NOT EXISTS installment_period_payment_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      installment_id INTEGER NOT NULL,
+      period_index INTEGER NOT NULL,
+      amount_paid INTEGER NOT NULL DEFAULT 0,
+      remaining_after INTEGER NOT NULL DEFAULT 0,
+      note TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
   `);
     ensureColumn(db, "installments", "shop_id", "INTEGER NOT NULL DEFAULT 0");
     ensureColumn(db, "installments", "shop_name", "TEXT NOT NULL DEFAULT ''");
@@ -313,8 +340,10 @@ function getDb() {
     ensureColumn(db, "installment_imports", "shop_id", "INTEGER NOT NULL DEFAULT 0");
     ensureColumn(db, "installment_imports", "shop_name", "TEXT NOT NULL DEFAULT ''");
     ensureColumn(db, "installment_imports", "normalization_logs", "TEXT NOT NULL DEFAULT '[]'");
+    ensureColumn(db, "installment_periods", "last_payment_at", "TEXT NOT NULL DEFAULT ''");
     normalizeLegacyPaymentDayValues(db);
     backfillLegacyCollectionMetadata(db);
+    backfillInstallmentPeriods(db);
     dbInstance = db;
     return db;
 }
@@ -673,10 +702,11 @@ function buildCollectionSchedule({ loanDate, loanDays, collectionIntervalDays, t
     const schedule = [];
 
     for (let index = 0; index < totalPeriods; index += 1) {
+        const periodStartDay = Math.min(Math.max(0, safeLoanDays - 1), index * safeIntervalDays);
         const periodEndDay = Math.min(safeLoanDays, (index + 1) * safeIntervalDays);
         schedule.push({
             periodIndex: index + 1,
-            dueDate: addDaysToIsoDate(loanDate, periodEndDay),
+            dueDate: addDaysToIsoDate(loanDate, periodStartDay),
             amount: baseAmount + (index < remainder ? 1 : 0),
             isPrepaid: index < safePrepaidPeriodCount,
             coveredDays: index === totalPeriods - 1 ? safeLoanDays - safeIntervalDays * index : safeIntervalDays
@@ -685,62 +715,225 @@ function buildCollectionSchedule({ loanDate, loanDays, collectionIntervalDays, t
 
     return schedule;
 }
-function getInstallmentCollectionState(row, loanDate, loanDays) {
-    const numericLoanDays = loanDays === null || loanDays === undefined ? Number.NaN : Number(loanDays);
-    if (!loanDate || !Number.isFinite(numericLoanDays) || numericLoanDays <= 0) {
-        return {
-            nextDueDate: "",
-            finalDueDate: "",
-            dueInDays: null,
-            dueStatus: "",
-            paidPeriodsCount: 0,
-            totalPeriods: 0,
-            isFullyPaid: false,
-            finalDueInDays: null
-        };
+function normalizePeriodPaymentStatus(amountDue, amountPaid) {
+    const safeAmountDue = Math.max(0, Number(amountDue || 0));
+    const safeAmountPaid = Math.max(0, Math.min(safeAmountDue, Number(amountPaid || 0)));
+    if (safeAmountDue > 0 && safeAmountPaid >= safeAmountDue) {
+        return "paid";
     }
-    const schedule = buildCollectionSchedule({
+    if (safeAmountPaid > 0) {
+        return "partial";
+    }
+    return "unpaid";
+}
+function buildInstallmentScheduleFromRow(row) {
+    const loanDate = String(row?.loan_date ?? row?.loanDate ?? "").trim();
+    const loanDays = Number(row?.loan_days ?? row?.loanDays ?? 0);
+    const intervalDays = Math.max(1, Number(row?.collection_interval_days ?? row?.collectionIntervalDays ?? 1) || 1);
+    if (!loanDate || !Number.isFinite(loanDays) || loanDays <= 0) {
+        return [];
+    }
+    return buildCollectionSchedule({
         loanDate,
-        loanDays: numericLoanDays,
-        collectionIntervalDays: Number(row.collection_interval_days ?? 1),
-        totalRevenue: Number(row.revenue ?? 0),
+        loanDays,
+        collectionIntervalDays: intervalDays,
+        totalRevenue: Number(row?.revenue ?? row?.Revenue ?? 0),
         prepaidPeriodCount: 0
-    });
-    const finalDueDate = addDaysToIsoDate(loanDate, numericLoanDays);
-    if (schedule.length === 0) {
-        return {
-            nextDueDate: "",
-            finalDueDate,
-            dueInDays: null,
-            dueStatus: "",
-            paidPeriodsCount: 0,
-            totalPeriods: 0,
-            isFullyPaid: false,
-            finalDueInDays: finalDueDate ? getDaysBetweenIsoDates(new Date().toISOString().slice(0, 10), finalDueDate) : null
-        };
-    }
-    const storedProgress = parseCollectionProgress(row.collection_progress);
-    const paidProgressSet = new Set(storedProgress);
-    if (paidProgressSet.size === 0) {
-        let remainingPaidBefore = Math.max(0, Number(row.paid_before ?? 0));
-        for (const period of schedule) {
-            const periodAmount = Number(period.amount || 0);
-            if (remainingPaidBefore < periodAmount) {
-                break;
-            }
-            remainingPaidBefore -= periodAmount;
-            paidProgressSet.add(Number(period.periodIndex));
+    }).map((period, index) => ({
+        periodIndex: Number(period.periodIndex),
+        fromDate: index === 0 ? loanDate : addDaysToIsoDate(loanDate, index * intervalDays),
+        toDate: addDaysToIsoDate(loanDate, Math.max(0, Math.min(loanDays - 1, ((index + 1) * intervalDays) - 1))),
+        dueDate: String(period.dueDate || ""),
+        amountDue: Math.max(0, Number(period.amount || 0))
+    }));
+}
+function listRawInstallmentPeriods(db, installmentId) {
+    return db.prepare(`
+      SELECT
+        id,
+        installment_id,
+        period_index,
+        from_date,
+        to_date,
+        due_date,
+        amount_due,
+        amount_paid,
+        status,
+        last_payment_at,
+        created_at,
+        updated_at
+      FROM installment_periods
+      WHERE installment_id = ?
+      ORDER BY period_index ASC
+    `).all(Number(installmentId));
+}
+function listInstallmentPaymentLogs(db, installmentId) {
+    return db.prepare(`
+      SELECT
+        id,
+        installment_id,
+        period_index,
+        amount_paid,
+        remaining_after,
+        note,
+        created_at
+      FROM installment_period_payment_logs
+      WHERE installment_id = ?
+      ORDER BY datetime(created_at) DESC, id DESC
+    `).all(Number(installmentId)).map((item) => ({
+        id: Number(item.id),
+        installmentId: Number(item.installment_id),
+        periodIndex: Number(item.period_index),
+        amountPaid: Number(item.amount_paid || 0),
+        remainingAfter: Number(item.remaining_after || 0),
+        note: String(item.note || ""),
+        createdAt: String(item.created_at || "")
+    }));
+}
+function buildLegacyPaidAmountMap(schedule, row) {
+    const progressSet = new Set(parseCollectionProgress(row?.collection_progress));
+    let remainingAmount = Math.max(0, Number(row?.paid_before ?? row?.paidBefore ?? 0));
+    const legacyMap = new Map();
+    for (const period of schedule) {
+        const amountDue = Math.max(0, Number(period.amountDue || 0));
+        let amountPaid = 0;
+        if (progressSet.has(Number(period.periodIndex))) {
+            amountPaid = amountDue;
         }
+        else if (remainingAmount > 0) {
+            amountPaid = Math.min(amountDue, remainingAmount);
+        }
+        legacyMap.set(Number(period.periodIndex), amountPaid);
+        remainingAmount = Math.max(0, remainingAmount - amountPaid);
     }
-    const nextUnpaidPeriod = schedule.find((period) => !paidProgressSet.has(Number(period.periodIndex))) || null;
-    const explicitPaymentDay = mapPaymentDayValue(row.payment_day, loanDate).paymentDay;
-    const nextDueDate = explicitPaymentDay || nextUnpaidPeriod?.dueDate || "";
+    return legacyMap;
+}
+function syncInstallmentPeriodsForRow(db, row, options = {}) {
+    const schedule = buildInstallmentScheduleFromRow(row);
+    const installmentId = Number(row?.id || 0);
+    if (!Number.isFinite(installmentId) || installmentId <= 0) {
+        return [];
+    }
+    const existingRows = listRawInstallmentPeriods(db, installmentId);
+    const existingMap = new Map(existingRows.map((item) => [Number(item.period_index), item]));
+    const legacyPaidMap = options.applyLegacyPaid ? buildLegacyPaidAmountMap(schedule, row) : new Map();
+    const insertStatement = db.prepare(`
+      INSERT INTO installment_periods (
+        installment_id,
+        period_index,
+        from_date,
+        to_date,
+        due_date,
+        amount_due,
+        amount_paid,
+        status,
+        last_payment_at,
+        created_at,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `);
+    const updateStatement = db.prepare(`
+      UPDATE installment_periods
+      SET
+        from_date = ?,
+        to_date = ?,
+        due_date = ?,
+        amount_due = ?,
+        amount_paid = ?,
+        status = ?,
+        last_payment_at = ?,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `);
+    const deleteStatement = db.prepare(`
+      DELETE FROM installment_periods
+      WHERE installment_id = ?
+        AND period_index > ?
+    `);
+    for (const period of schedule) {
+        const existing = existingMap.get(Number(period.periodIndex));
+        const amountDue = Math.max(0, Number(period.amountDue || 0));
+        const amountPaid = existing
+            ? Math.max(0, Math.min(amountDue, Number(existing.amount_paid || 0)))
+            : Math.max(0, Math.min(amountDue, Number(legacyPaidMap.get(Number(period.periodIndex)) || 0)));
+        const status = normalizePeriodPaymentStatus(amountDue, amountPaid);
+        const lastPaymentAt = existing
+            ? String(existing.last_payment_at || "").trim()
+            : amountPaid > 0
+                ? new Date().toISOString()
+                : "";
+        if (!existing) {
+            insertStatement.run(installmentId, Number(period.periodIndex), String(period.fromDate || ""), String(period.toDate || ""), String(period.dueDate || ""), amountDue, amountPaid, status, lastPaymentAt);
+            continue;
+        }
+        const existingStatus = String(existing.status || "").trim() || normalizePeriodPaymentStatus(Number(existing.amount_due || 0), Number(existing.amount_paid || 0));
+        if (String(existing.from_date || "") === String(period.fromDate || "")
+            && String(existing.to_date || "") === String(period.toDate || "")
+            && String(existing.due_date || "") === String(period.dueDate || "")
+            && Number(existing.amount_due || 0) === amountDue
+            && Number(existing.amount_paid || 0) === amountPaid
+            && existingStatus === status
+            && String(existing.last_payment_at || "") === lastPaymentAt) {
+            continue;
+        }
+        updateStatement.run(String(period.fromDate || ""), String(period.toDate || ""), String(period.dueDate || ""), amountDue, amountPaid, status, lastPaymentAt, Number(existing.id));
+    }
+    deleteStatement.run(installmentId, schedule.length);
+    return listRawInstallmentPeriods(db, installmentId);
+}
+function getNormalizedInstallmentPeriods(row, options = {}) {
+    const db = options.db || getDb();
+    const schedule = buildInstallmentScheduleFromRow(row);
+    const installmentId = Number(row?.id || 0);
+    if (!Number.isFinite(installmentId) || installmentId <= 0 || schedule.length === 0) {
+        return [];
+    }
+    let rawRows = listRawInstallmentPeriods(db, installmentId);
+    const needsSync = rawRows.length !== schedule.length || rawRows.some((item, index) => {
+        const scheduleItem = schedule[index];
+        return !scheduleItem
+            || String(item.from_date || "") !== String(scheduleItem.fromDate || "")
+            || String(item.to_date || "") !== String(scheduleItem.toDate || "")
+            || String(item.due_date || "") !== String(scheduleItem.dueDate || "")
+            || Number(item.amount_due || 0) !== Number(scheduleItem.amountDue || 0);
+    });
+    if (needsSync) {
+        rawRows = syncInstallmentPeriodsForRow(db, row, { applyLegacyPaid: options.applyLegacyPaid || rawRows.length === 0 });
+    }
+    return rawRows.map((item) => {
+        const amountDue = Math.max(0, Number(item.amount_due || 0));
+        const amountPaid = Math.max(0, Math.min(amountDue, Number(item.amount_paid || 0)));
+        const amountRemaining = Math.max(0, amountDue - amountPaid);
+        return {
+            id: Number(item.id),
+            installmentId: Number(item.installment_id),
+            periodIndex: Number(item.period_index),
+            fromDate: String(item.from_date || ""),
+            toDate: String(item.to_date || ""),
+            dueDate: String(item.due_date || ""),
+            amountDue,
+            amountPaid,
+            amountRemaining,
+            isPaid: amountRemaining <= 0,
+            status: normalizePeriodPaymentStatus(amountDue, amountPaid),
+            lastPaymentAt: String(item.last_payment_at || ""),
+            createdAt: String(item.created_at || ""),
+            updatedAt: String(item.updated_at || "")
+        };
+    });
+}
+function buildCollectionStateFromPeriods(periods, finalDueDate) {
+    const normalizedPeriods = Array.isArray(periods) ? periods : [];
+    const totalPeriods = normalizedPeriods.length;
+    const paidPeriodsCount = normalizedPeriods.filter((period) => Number(period.amountRemaining || 0) <= 0).length;
+    const outstandingAmount = normalizedPeriods.reduce((total, period) => total + Math.max(0, Number(period.amountRemaining || 0)), 0);
+    const paidBefore = normalizedPeriods.reduce((total, period) => total + Math.max(0, Number(period.amountPaid || 0)), 0);
+    const firstOpenPeriod = normalizedPeriods.find((period) => Number(period.amountRemaining || 0) > 0) || null;
+    const finalPaymentDueDate = normalizedPeriods[normalizedPeriods.length - 1]?.dueDate || finalDueDate || "";
+    const nextDueDate = firstOpenPeriod?.dueDate || "";
     const todayIsoDate = new Date().toISOString().slice(0, 10);
     const dueInDays = nextDueDate ? getDaysBetweenIsoDates(todayIsoDate, nextDueDate) : null;
-    const finalDueInDays = finalDueDate ? getDaysBetweenIsoDates(todayIsoDate, finalDueDate) : null;
-    const paidPeriodsCount = paidProgressSet.size;
-    const totalPeriods = schedule.length;
-    const isFullyPaid = totalPeriods > 0 && paidPeriodsCount >= totalPeriods;
+    const finalDueInDays = finalPaymentDueDate ? getDaysBetweenIsoDates(todayIsoDate, finalPaymentDueDate) : null;
     let dueStatus = "";
     if (dueInDays !== null) {
         if (dueInDays < 0) {
@@ -749,27 +942,118 @@ function getInstallmentCollectionState(row, loanDate, loanDays) {
         else if (dueInDays === 0) {
             dueStatus = "due_today";
         }
-        else if (dueInDays <= 3) {
+        else if (dueInDays === 1) {
             dueStatus = "due_soon";
         }
     }
+    const collectionProgress = [];
+    for (const period of normalizedPeriods) {
+        if (Number(period.amountRemaining || 0) > 0) {
+            break;
+        }
+        collectionProgress.push(Number(period.periodIndex));
+    }
     return {
         nextDueDate,
-        finalDueDate,
+        finalDueDate: finalDueDate || "",
+        finalPaymentDueDate,
         dueInDays,
         dueStatus,
         paidPeriodsCount,
         totalPeriods,
-        isFullyPaid,
-        finalDueInDays
+        isFullyPaid: totalPeriods > 0 && outstandingAmount <= 0,
+        finalDueInDays,
+        paidBefore,
+        collectionProgress,
+        currentPeriod: firstOpenPeriod,
+        outstandingAmount,
+        installmentAmount: firstOpenPeriod ? Number(firstOpenPeriod.amountDue || 0) : Number(normalizedPeriods[0]?.amountDue || 0),
+        prepaidPeriodCount: collectionProgress.length,
+        periods: normalizedPeriods
     };
+}
+function syncInstallmentDerivedFields(db, row) {
+    const periods = getNormalizedInstallmentPeriods(row, { db, applyLegacyPaid: true });
+    const loanDate = String(row?.loan_date ?? row?.loanDate ?? "").trim();
+    const loanDays = Number(row?.loan_days ?? row?.loanDays ?? 0);
+    const finalDueDate = loanDate && Number.isFinite(loanDays) && loanDays > 0 ? addDaysToIsoDate(loanDate, loanDays) : "";
+    const collectionState = buildCollectionStateFromPeriods(periods, finalDueDate);
+    const statusText = resolveInstallmentDisplayStatus(collectionState);
+    const statusCode = statusText === "Đã đóng" ? 1 : statusText === "Quá hạn" ? 2 : 0;
+    const nextPaymentDay = collectionState.currentPeriod?.dueDate || collectionState.finalPaymentDueDate || finalDueDate || "";
+    db.prepare(`
+      UPDATE installments
+      SET
+        paid_before = ?,
+        payment_day = ?,
+        installment_amount = ?,
+        prepaid_period_count = ?,
+        collection_progress = ?,
+        status_code = ?,
+        status_text = ?,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(collectionState.paidBefore, nextPaymentDay, collectionState.installmentAmount, collectionState.prepaidPeriodCount, JSON.stringify(collectionState.collectionProgress), statusCode, statusText, Number(row.id));
+    return {
+        ...collectionState,
+        statusCode,
+        statusText
+    };
+}
+function backfillInstallmentPeriods(db) {
+    const rows = db.prepare(`
+      SELECT
+        id,
+        loan_date,
+        revenue,
+        paid_before,
+        payment_day,
+        loan_days,
+        installment_amount,
+        collection_interval_days,
+        collection_progress
+      FROM installments
+    `).all();
+    const runMigration = db.transaction((items) => {
+        for (const row of items) {
+            syncInstallmentPeriodsForRow(db, row, { applyLegacyPaid: true });
+            syncInstallmentDerivedFields(db, row);
+        }
+    });
+    runMigration(rows);
+}
+function getInstallmentCollectionState(row, loanDate, loanDays) {
+    const numericLoanDays = loanDays === null || loanDays === undefined ? Number.NaN : Number(loanDays);
+    if (!loanDate || !Number.isFinite(numericLoanDays) || numericLoanDays <= 0) {
+        return {
+            nextDueDate: "",
+            finalDueDate: "",
+            finalPaymentDueDate: "",
+            dueInDays: null,
+            dueStatus: "",
+            paidPeriodsCount: 0,
+            totalPeriods: 0,
+            isFullyPaid: false,
+            finalDueInDays: null,
+            paidBefore: 0,
+            collectionProgress: [],
+            currentPeriod: null,
+            outstandingAmount: 0,
+            installmentAmount: 0,
+            prepaidPeriodCount: 0,
+            periods: []
+        };
+    }
+    const finalDueDate = addDaysToIsoDate(loanDate, numericLoanDays);
+    const periods = getNormalizedInstallmentPeriods(row, { applyLegacyPaid: true });
+    return buildCollectionStateFromPeriods(periods, finalDueDate);
 }
 
 function resolveInstallmentDisplayStatus(collectionState) {
     if (collectionState.isFullyPaid) {
         return "Đã đóng";
     }
-    if (collectionState.finalDueInDays !== null && collectionState.finalDueInDays < 0) {
+    if (collectionState.finalDueInDays !== null && collectionState.finalDueInDays < 0 && Number(collectionState.outstandingAmount || 0) > 0) {
         return "Quá hạn";
     }
     if (collectionState.dueInDays === 0) {
@@ -778,10 +1062,7 @@ function resolveInstallmentDisplayStatus(collectionState) {
     if (collectionState.dueInDays === 1) {
         return "Ngày mai đến ngày";
     }
-    if (collectionState.paidPeriodsCount <= 0) {
-        return "Chậm trả góp";
-    }
-    if (collectionState.dueInDays !== null && collectionState.dueInDays < 0) {
+    if (collectionState.dueInDays !== null && collectionState.dueInDays < 0 && Number(collectionState.outstandingAmount || 0) > 0) {
         return "Chậm trả góp";
     }
     return "Đang vay";
@@ -1159,7 +1440,7 @@ function mapInstallmentRow(row) {
         revenue: Number(row.revenue ?? 0),
         setupFee: Number(row.setup_fee ?? 0),
         netDisbursement: Number(row.net_disbursement ?? 0),
-        paidBefore: Number(row.paid_before ?? 0),
+        paidBefore: Number(collectionState.paidBefore ?? row.paid_before ?? 0),
         paymentDay: paymentDate.paymentDay,
         paymentDayDisplay: paymentDate.paymentDayDisplay,
         loanDays,
@@ -1167,7 +1448,7 @@ function mapInstallmentRow(row) {
         dueDateDisplay: dueDate ? formatDisplayDate(dueDate) : "",
         dueInDays,
         dueStatus,
-        installmentAmount: Number(row.installment_amount ?? 0),
+        installmentAmount: Number(collectionState.installmentAmount ?? row.installment_amount ?? 0),
         note: String(row.note ?? ""),
         installerName: String(row.installer_name ?? ""),
         referralFee: Number(row.referral_fee ?? 0),
@@ -1176,8 +1457,10 @@ function mapInstallmentRow(row) {
         statusText,
         paymentMethod: normalizePaymentMethod(row.payment_method),
         collectionIntervalDays: Number(row.collection_interval_days ?? 1),
-        prepaidPeriodCount: Number(row.prepaid_period_count ?? 0),
-        collectionProgress: parseCollectionProgress(row.collection_progress),
+        prepaidPeriodCount: Number(collectionState.prepaidPeriodCount ?? row.prepaid_period_count ?? 0),
+        collectionProgress: Array.isArray(collectionState.collectionProgress) ? collectionState.collectionProgress.slice() : parseCollectionProgress(row.collection_progress),
+        periods: Array.isArray(collectionState.periods) ? collectionState.periods.map((period) => ({ ...period })) : [],
+        currentPeriod: collectionState.currentPeriod ? { ...collectionState.currentPeriod } : null,
         createdAt: String(row.created_at ?? ""),
         updatedAt: String(row.updated_at ?? "")
     };
@@ -1760,10 +2043,8 @@ function previewInstallment(input) {
             paidBefore: Number(normalized.paidBefore || 0),
             firstPaymentDay: firstUnpaidPeriod?.dueDate || normalized.paymentDay || "",
             firstPaymentDayDisplay: firstUnpaidPeriod?.dueDate ? formatDisplayDate(firstUnpaidPeriod.dueDate) : formatInstallmentDateForUi(normalized.paymentDay),
-            finalDueDate: lastPeriod?.dueDate || (normalized.loanDate && loanDays > 0 ? addDaysToIsoDate(normalized.loanDate, loanDays) : ""),
-            finalDueDateDisplay: lastPeriod?.dueDate
-                ? formatDisplayDate(lastPeriod.dueDate)
-                : (normalized.loanDate && loanDays > 0 ? formatDisplayDate(addDaysToIsoDate(normalized.loanDate, loanDays)) : ""),
+            finalDueDate: normalized.loanDate && loanDays > 0 ? addDaysToIsoDate(normalized.loanDate, loanDays) : "",
+            finalDueDateDisplay: normalized.loanDate && loanDays > 0 ? formatDisplayDate(addDaysToIsoDate(normalized.loanDate, loanDays)) : "",
             prepaidPeriodCount: Number(normalized.prepaidPeriodCount || 0)
         }
     };
@@ -1815,15 +2096,15 @@ function syncAllInstallmentStatuses() {
     const runSync = db.transaction((items) => {
         let updatedCount = 0;
         for (const row of items) {
-            const mapped = mapInstallmentRow(row);
+            syncInstallmentPeriodsForRow(db, row, { applyLegacyPaid: true });
+            const derived = syncInstallmentDerivedFields(db, row);
             const currentStatusCode = row.status_code === null || row.status_code === undefined ? null : Number(row.status_code);
             const currentStatusText = String(row.status_text ?? "").trim();
-            const nextStatusCode = mapped.statusCode === null || mapped.statusCode === undefined ? null : Number(mapped.statusCode);
-            const nextStatusText = String(mapped.statusText || "").trim();
+            const nextStatusCode = derived.statusCode === null || derived.statusCode === undefined ? null : Number(derived.statusCode);
+            const nextStatusText = String(derived.statusText || "").trim();
             if (currentStatusCode === nextStatusCode && currentStatusText === nextStatusText) {
                 continue;
             }
-            updateStatement.run(nextStatusCode, nextStatusText, Number(row.id));
             updatedCount += 1;
         }
         return updatedCount;
@@ -1878,15 +2159,8 @@ function persistResolvedInstallmentStatus(id) {
     if (!row) {
         throw new Error("Không tìm thấy hợp đồng trả góp.");
     }
-    const mapped = mapInstallmentRow(row);
-    db.prepare(`
-      UPDATE installments
-      SET
-        status_code = ?,
-        status_text = ?,
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `).run(mapped.statusCode, mapped.statusText, installmentId);
+    syncInstallmentPeriodsForRow(db, row, { applyLegacyPaid: true });
+    syncInstallmentDerivedFields(db, row);
     return getInstallmentById(installmentId);
 }
 function formatInstallmentDateForUi(value) {
@@ -1931,7 +2205,14 @@ function getInstallmentById(id) {
       WHERE id = ?
     `)
         .get(id);
-    return row ? mapInstallmentRow(row) : null;
+    if (!row) {
+        return null;
+    }
+    const mapped = mapInstallmentRow(row);
+    return {
+        ...mapped,
+        paymentLogs: listInstallmentPaymentLogs(db, Number(row.id))
+    };
 }
 function getInstallmentSnapshotById(id) {
     const db = getDb();
@@ -2356,65 +2637,88 @@ function updateInstallmentCollectionProgress(id, paidPeriodIndices) {
     if (!installment) {
         throw new Error("Không tìm thấy hợp đồng trả góp.");
     }
-    const schedule = buildCollectionSchedule({
-        loanDate: installment.loanDate,
-        loanDays: Number(installment.loanDays ?? 0),
-        collectionIntervalDays: Number(installment.collectionIntervalDays ?? 1),
-        totalRevenue: Number(installment.revenue ?? 0),
-        prepaidPeriodCount: 0
-    });
-    if (schedule.length === 0) {
+    const periods = Array.isArray(installment.periods) ? installment.periods : [];
+    if (periods.length === 0) {
         throw new Error("Không thể tạo lịch đóng cho hợp đồng này.");
     }
     const selectedProgress = Array.from(new Set((Array.isArray(paidPeriodIndices) ? paidPeriodIndices : [])
         .map((item) => Number(item))
-        .filter((item) => Number.isFinite(item) && item > 0 && item <= schedule.length)
+        .filter((item) => Number.isFinite(item) && item > 0 && item <= periods.length)
         .map((item) => Math.trunc(item)))).sort((a, b) => a - b);
-    const normalizedProgress = [];
-    for (let periodIndex = 1; periodIndex <= schedule.length; periodIndex += 1) {
-        if (!selectedProgress.includes(periodIndex)) {
-            break;
-        }
-        normalizedProgress.push(periodIndex);
-    }
-    const progressSet = new Set(normalizedProgress);
-    const paidBefore = schedule.reduce((total, period) => total + (progressSet.has(period.periodIndex) ? Number(period.amount || 0) : 0), 0);
-    let prepaidPeriodCount = 0;
-    for (const period of schedule) {
-        if (!progressSet.has(period.periodIndex)) {
-            break;
-        }
-        prepaidPeriodCount += 1;
-    }
-    const firstUnpaidPeriod = schedule.find((period) => !progressSet.has(period.periodIndex)) || null;
-    const nextPaymentDay = firstUnpaidPeriod?.dueDate || addDaysToIsoDate(installment.loanDate, Number(installment.loanDays ?? 0));
-    const allPeriodsPaid = normalizedProgress.length === schedule.length;
-    const currentStatusText = String(installment.statusText || "").trim();
-    const normalizedCurrentStatusText = currentStatusText.toLowerCase();
-    const isClosedStatus = normalizedCurrentStatusText === "đã hoàn tất"
-        || normalizedCurrentStatusText === "da hoan tat"
-        || normalizedCurrentStatusText === "đã đóng"
-        || normalizedCurrentStatusText === "da dong";
-    const nextStatusText = allPeriodsPaid
-        ? "Đã đóng"
-        : isClosedStatus
-            ? "Đang vay"
-            : currentStatusText;
-    const nextStatusCode = allPeriodsPaid ? 1 : installment.statusCode;
     const db = getDb();
-    const result = db.prepare(`
-      UPDATE installments
-      SET
-        paid_before = ?,
-        payment_day = ?,
-        prepaid_period_count = ?,
-        collection_progress = ?,
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `).run(paidBefore, nextPaymentDay, prepaidPeriodCount, JSON.stringify(normalizedProgress), installmentId);
-    if (Number(result.changes || 0) === 0) {
-        throw new Error("Không thể cập nhật tiến độ đóng tiền.");
+    const runUpdate = db.transaction(() => {
+        for (const period of periods) {
+            const shouldBePaid = selectedProgress.includes(Number(period.periodIndex));
+            const nextPaidAmount = shouldBePaid ? Number(period.amountDue || 0) : 0;
+            db.prepare(`
+          UPDATE installment_periods
+          SET
+            amount_paid = ?,
+            status = ?,
+            last_payment_at = ?,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE installment_id = ? AND period_index = ?
+        `).run(nextPaidAmount, normalizePeriodPaymentStatus(Number(period.amountDue || 0), nextPaidAmount), shouldBePaid ? new Date().toISOString() : "", installmentId, Number(period.periodIndex));
+        }
+    });
+    runUpdate();
+    return persistResolvedInstallmentStatus(installmentId);
+}
+function recordInstallmentPayment(id, periodIndex, amountPaidInput, note = "") {
+    const installmentId = Number(id);
+    const normalizedPeriodIndex = Number(periodIndex);
+    const amountPaid = Math.max(0, Math.trunc(Number(amountPaidInput || 0)));
+    if (!Number.isFinite(installmentId) || installmentId <= 0) {
+        throw new Error("ID hợp đồng không hợp lệ.");
     }
+    if (!Number.isFinite(normalizedPeriodIndex) || normalizedPeriodIndex <= 0) {
+        throw new Error("Kỳ thanh toán không hợp lệ.");
+    }
+    if (!Number.isFinite(amountPaid) || amountPaid <= 0) {
+        throw new Error("Số tiền khách đóng phải lớn hơn 0.");
+    }
+    const installment = getInstallmentById(installmentId);
+    if (!installment) {
+        throw new Error("Không tìm thấy hợp đồng trả góp.");
+    }
+    const periods = Array.isArray(installment.periods) ? installment.periods : [];
+    const currentPeriod = periods.find((period) => Number(period.amountRemaining || 0) > 0) || null;
+    if (!currentPeriod) {
+        throw new Error("Hợp đồng này đã đóng đủ.");
+    }
+    if (Number(currentPeriod.periodIndex) !== normalizedPeriodIndex) {
+        throw new Error(`Vui lòng thu tiền ở kỳ ${currentPeriod.periodIndex} trước.`);
+    }
+    if (amountPaid > Number(currentPeriod.amountRemaining || 0)) {
+        throw new Error(`Số tiền thu vượt quá số tiền còn thiếu của kỳ ${currentPeriod.periodIndex}.`);
+    }
+    const nextAmountPaid = Number(currentPeriod.amountPaid || 0) + amountPaid;
+    const nextRemaining = Math.max(0, Number(currentPeriod.amountDue || 0) - nextAmountPaid);
+    const paymentNote = String(note || "").trim();
+    const db = getDb();
+    const nowIso = new Date().toISOString();
+    const runPayment = db.transaction(() => {
+        db.prepare(`
+        UPDATE installment_periods
+        SET
+          amount_paid = ?,
+          status = ?,
+          last_payment_at = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE installment_id = ? AND period_index = ?
+      `).run(nextAmountPaid, normalizePeriodPaymentStatus(Number(currentPeriod.amountDue || 0), nextAmountPaid), nowIso, installmentId, normalizedPeriodIndex);
+        db.prepare(`
+        INSERT INTO installment_period_payment_logs (
+          installment_id,
+          period_index,
+          amount_paid,
+          remaining_after,
+          note,
+          created_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+      `).run(installmentId, normalizedPeriodIndex, amountPaid, nextRemaining, paymentNote, nowIso);
+    });
+    runPayment();
     return persistResolvedInstallmentStatus(installmentId);
 }
 function updateInstallmentNextPaymentDay(id, nextPaymentDay) {
@@ -2431,17 +2735,30 @@ function updateInstallmentNextPaymentDay(id, nextPaymentDay) {
         throw new Error("Ngày đóng tiếp theo không hợp lệ.");
     }
     const db = getDb();
+    const currentPeriod = Array.isArray(installment.periods)
+        ? installment.periods.find((period) => Number(period.amountRemaining || 0) > 0) || null
+        : null;
+    if (!currentPeriod) {
+        throw new Error("Hợp đồng này đã đóng đủ, không cần hẹn ngày mới.");
+    }
     const result = db
         .prepare(`
+      UPDATE installment_periods
+      SET
+        due_date = ?,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE installment_id = ? AND period_index = ?
+    `)
+        .run(normalizedPaymentDate.value, installmentId, Number(currentPeriod.periodIndex || 0));
+    if (Number(result.changes || 0) === 0) {
+        throw new Error("Không thể cập nhật ngày đóng tiếp theo.");
+    }
+    db.prepare(`
       UPDATE installments
       SET
         payment_day = ?,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `)
-        .run(normalizedPaymentDate.value, installmentId);
-    if (Number(result.changes || 0) === 0) {
-        throw new Error("Không thể cập nhật ngày đóng tiếp theo.");
-    }
-    return getInstallmentById(installmentId);
+    `).run(normalizedPaymentDate.value, installmentId);
+    return persistResolvedInstallmentStatus(installmentId);
 }
